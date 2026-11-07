@@ -1,0 +1,8 @@
+*.db
+*.db-shm
+*.db-wal
+/dist/
+internal/api/dist/*
+!internal/api/dist/.gitkeep
+testdata/os/
+web/node_modules/

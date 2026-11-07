@@ -1,0 +1,10 @@
+# Local development: simulated valves and a simulated rain sensor.
+listen = "127.0.0.1:8080"
+db     = "dev.db"
+
+[outputs]
+driver = "sim"
+count  = 8
+
+[inputs.rain]
+sim = true

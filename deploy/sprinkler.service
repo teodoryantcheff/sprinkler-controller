@@ -1,0 +1,22 @@
+[Unit]
+Description=Sprinkler controller
+After=network.target time-sync.target
+
+[Service]
+Type=notify
+User=sprinkler
+Group=gpio
+ExecStart=/usr/local/bin/sprinkler serve -config /etc/sprinkler/sprinkler.toml
+Restart=always
+RestartSec=3
+WatchdogSec=30
+NotifyAccess=main
+StateDirectory=sprinkler
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+DeviceAllow=/dev/gpiochip0 rw
+
+[Install]
+WantedBy=multi-user.target

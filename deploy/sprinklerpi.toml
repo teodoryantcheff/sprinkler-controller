@@ -1,0 +1,24 @@
+# sprinklerpi (Pi 1, OSPi-style 74HC595 board). Values read from the live
+# OpenSprinkler 2.1.8 install: shift register on BCM 22/27/4/17, one rain
+# sensor (normally open) on BCM 14.
+#
+# Until Cutover, run with driver = "sim" (Shadow mode) — never "shiftreg"
+# while OpenSprinkler or OSPy is still running.
+listen = ":8090"
+db     = "/var/lib/sprinkler/sprinkler.db"
+
+[outputs]
+driver = "sim"        # shiftreg at Cutover
+chip   = "gpiochip0"
+count  = 8
+
+[outputs.shiftreg]
+latch = 22
+data  = 27
+clock = 4
+oe    = 17
+
+[inputs.rain]
+sim      = true       # pin = 14 at Cutover (OpenSprinkler holds it until then)
+pin      = 14
+normally = "open"
