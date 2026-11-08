@@ -218,7 +218,9 @@ sudo -u sprinkler sprinkler passwd -config /etc/sprinkler/sprinkler.toml
 ## Build and test
 
 ```sh
-make check          # go vet, go test, svelte-check
+make tools hooks    # once per clone: Go linters + pre-commit hook
+make fmt            # gofumpt/goimports + Prettier, in place
+make check          # lint, go vet, go test, govulncheck, svelte-check
 make cross          # dist/sprinkler-{armv6,armv7,arm64,amd64}, static, no cgo
 ```
 

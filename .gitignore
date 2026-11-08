@@ -1,8 +1,40 @@
+# Build output
+/dist/
+/sprinkler
+internal/api/dist/*
+!internal/api/dist/.gitkeep
+web/node_modules/
+web/.vite/
+
+# Databases (dev.db etc.)
 *.db
 *.db-shm
 *.db-wal
-/dist/
-internal/api/dist/*
-!internal/api/dist/.gitkeep
+
+# OpenSprinkler copies: nvm.dat holds the hashed password and location
 testdata/os/
-web/node_modules/
+
+# Local TLS material and secrets
+*.pem
+*.key
+*.crt
+.env
+.env.*
+
+# Go tooling
+*.test
+*.out
+coverage.*
+/go.work
+/go.work.sum
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Claude Code local state (shared settings.json stays trackable)
+.claude/worktrees/
+.claude/settings.local.json
