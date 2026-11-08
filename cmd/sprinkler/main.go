@@ -85,6 +85,23 @@ func defaultConfig() Config {
 	return c
 }
 
+// loadConfig reads path over the defaults ("" = defaults only). Unknown
+// keys are logged: a typo must not silently fall back to a default.
+func loadConfig(path string, log *slog.Logger) (Config, error) {
+	cfg := defaultConfig()
+	if path == "" {
+		return cfg, nil
+	}
+	md, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
+		return cfg, fmt.Errorf("config: %w", err)
+	}
+	for _, k := range md.Undecoded() {
+		log.Warn("config: unknown key, ignored", "file", path, "key", k.String())
+	}
+	return cfg, nil
+}
+
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	if len(os.Args) < 2 {
@@ -94,7 +111,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "serve":
-		err = serve(os.Args[2:], log)
+		err = serve(context.Background(), os.Args[2:], log)
 	case "import":
 		err = importCmd(os.Args[2:], log)
 	case "passwd":
@@ -165,18 +182,16 @@ func openOutputs(c Config, log *slog.Logger) (hw.Outputs, error) {
 	return nil, fmt.Errorf("unknown output driver %q", c.Outputs.Driver)
 }
 
-func serve(args []string, log *slog.Logger) (err error) {
+func serve(parent context.Context, args []string, log *slog.Logger) (err error) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "TOML config (hardware, port)")
 	listen := fs.String("listen", "", "override listen address")
 	dbPath := fs.String("db", "", "override database file")
 	fs.Parse(args)
 
-	cfg := defaultConfig()
-	if *cfgPath != "" {
-		if _, err := toml.DecodeFile(*cfgPath, &cfg); err != nil {
-			return fmt.Errorf("config: %w", err)
-		}
+	cfg, err := loadConfig(*cfgPath, log)
+	if err != nil {
+		return err
 	}
 	if *listen != "" {
 		cfg.Listen = *listen
@@ -246,7 +261,7 @@ func serve(args []string, log *slog.Logger) (err error) {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	r.Alive = watchdog(log)
