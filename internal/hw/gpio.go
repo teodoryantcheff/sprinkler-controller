@@ -197,11 +197,18 @@ type RelayConfig struct {
 	ActiveLow bool
 }
 
+// lineSet is the part of *gpiocdev.Lines the relay driver uses; faked in
+// tests.
+type lineSet interface {
+	SetValues(values []int) error
+	Close() error
+}
+
 // Relay is a GPIO relay board driver.
 type Relay struct {
 	mu    sync.Mutex
 	cfg   RelayConfig
-	lines *gpiocdev.Lines
+	lines lineSet
 	chip  *gpiocdev.Chip
 }
 
@@ -258,13 +265,21 @@ func (r *Relay) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lines.Close()
-	r.chip.Close()
+	if r.chip != nil {
+		r.chip.Close()
+	}
 	return err
+}
+
+// lineGet is the part of *gpiocdev.Line the sensor uses; faked in tests.
+type lineGet interface {
+	Value() (int, error)
+	Close() error
 }
 
 // GPIOInput is a sensor on a GPIO line with the internal pull-up enabled.
 type GPIOInput struct {
-	line     *gpiocdev.Line
+	line     lineGet
 	normally string // open: pull-up reads 1 when dry; closed: reads 0 when dry
 }
 
