@@ -84,4 +84,25 @@ A full SD card image backup is at `/home/teo/backups/sprinklerpi-2026-11-07.img.
 - Default to the `sim` driver in development and tests. `make run` uses `deploy/dev.toml` (sim valves + sim rain sensor).
 - The built UI goes to `internal/api/dist` (gitignored except `.gitkeep`); run `make web` before `go build` or the binary serves a "UI not built" page.
 - Web UI in `web/` (Svelte + TypeScript), built output embedded via `go:embed`; no CDN assets; keep it under 150 KB gzipped.
-- Run `go vet ./...` and `go test ./...` before calling work done.
+- Run `make check` (lint, vet, test, govulncheck, svelte-check) before calling work done.
+
+## Formatting and linting
+
+- Go: `gofumpt` + `goimports` (local prefix `sprinkler`) and `golangci-lint` v2 with the config in `.golangci.yml` (standard set plus gosec, errorlint, revive, bodyclose, sqlclosecheck, rowserrcheck, misspell, unconvert, nolintlint). `govulncheck` for vulnerabilities.
+- Web: Prettier (`web/.prettierrc.json`) and ESLint (`web/eslint.config.js`, with typescript-eslint and eslint-plugin-svelte), plus `svelte-check`.
+- `make fmt` formats everything in place, and `make lint` checks without changing files. `make tools` installs the Go tools; `cd web && npm ci` installs the web ones.
+- **Format and lint before every commit.** The `.githooks/pre-commit` hook runs the same checks on staged Go/web changes. Enable it once per clone with `make hooks`, and don't bypass it (`--no-verify`) unless the user asks.
+- Fix the code rather than silencing a linter. When a finding is a deliberate choice, use an inline `//nolint:<linter> // <reason>` (`nolintlint` requires the reason) or `// eslint-disable-next-line <rule> -- <reason>`. Widen `.golangci.yml` only for repo-wide policy.
+- Keep the `go` directive in `go.mod` at the latest patch release; govulncheck flags stdlib CVEs fixed in newer patches.
+
+## Commit messages — caveman style
+
+Short, plain words, no filler. Few words, much meaning.
+
+- Subject: `area: what changed`, lower case, imperative, at most about 50 characters, no trailing period. Use areas such as `runner`, `api`, `web`, `store`, `importos`, `deploy`, `docs` or `lint`.
+- Drop articles, "this commit", "in order to", and politeness.
+- Body is optional. Add one only when the *why* isn't obvious: short fragments, one per line, wrapped at 72 characters.
+- Examples:
+  - `runner: close valves on panic`
+  - `api: reject non-JSON writes`
+  - `go: bump to 1.26.10, stdlib CVEs`

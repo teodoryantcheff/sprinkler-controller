@@ -1,0 +1,18 @@
+#!/bin/sh
+# Format check + lint before every commit. Enable with `make hooks`.
+# Fix with `make fmt`; bypass in an emergency with `git commit --no-verify`.
+set -e
+export PATH="$(go env GOPATH)/bin:$PATH"
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+if echo "$staged" | grep -qE '\.go$|^go\.(mod|sum)$|^\.golangci\.yml$'; then
+	golangci-lint fmt --diff ./...
+	golangci-lint run ./...
+	go vet ./...
+fi
+
+if echo "$staged" | grep -q '^web/'; then
+	(cd web && npm run --silent lint)
+fi

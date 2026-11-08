@@ -20,6 +20,7 @@
   const PAGE = 100
 
   async function loadRuns(reset = true) {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local query builder, not state
     const q = new URLSearchParams({ limit: String(PAGE) })
     if (zone) q.set('zone', zone)
     if (program) q.set('program', program)
@@ -29,14 +30,21 @@
       const page = await api<Run[]>('GET', '/api/runs?' + q)
       runs = reset ? page : [...runs, ...page]
       more = page.length === PAGE
-    } catch (e) { toast(errMsg(e), true) }
+    } catch (e) {
+      toast(errMsg(e), true)
+    }
   }
   async function loadEvents() {
-    try { events = await api<Ev[]>('GET', '/api/log?limit=200') } catch (e) { toast(errMsg(e), true) }
+    try {
+      events = await api<Ev[]>('GET', '/api/log?limit=200')
+    } catch (e) {
+      toast(errMsg(e), true)
+    }
   }
 
   onMount(async () => {
-    loadZones(); loadPrograms()
+    loadZones()
+    loadPrograms()
     loadRuns()
     weeks = await api<Week[]>('GET', '/api/history/weekly?weeks=10').catch(() => [])
   })
@@ -48,7 +56,10 @@
       const iso = r.start || r.planned_start
       const day = new Date(iso).toLocaleDateString('en-CA', { timeZone: tz })
       let g = out[out.length - 1]
-      if (!g || g.day !== day) { g = { day, label: dateLabel(iso, tz), runs: [] }; out.push(g) }
+      if (!g || g.day !== day) {
+        g = { day, label: dateLabel(iso, tz), runs: [] }
+        out.push(g)
+      }
       g.runs.push(r)
     }
     return out
@@ -72,7 +83,13 @@
   <h1>{t('history')}</h1>
   <div class="seg" role="group">
     <button aria-pressed={tab === 'runs'} onclick={() => (tab = 'runs')}>{t('runs_tab')}</button>
-    <button aria-pressed={tab === 'events'} onclick={() => { tab = 'events'; loadEvents() }}>{t('events_tab')}</button>
+    <button
+      aria-pressed={tab === 'events'}
+      onclick={() => {
+        tab = 'events'
+        loadEvents()
+      }}>{t('events_tab')}</button
+    >
   </div>
 </header>
 
@@ -81,10 +98,20 @@
     <h2>{t('minutes_per_week')}</h2>
     <div class="card" style="overflow-x:auto">
       <table>
-        <thead><tr><th>{t('zone')}</th>{#each weekCols as w}<th class="num">{new Date(w + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}</th>{/each}</tr></thead>
+        <thead
+          ><tr
+            ><th>{t('zone')}</th>{#each weekCols as w}<th class="num"
+                >{new Date(w + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}</th
+              >{/each}</tr
+          ></thead
+        >
         <tbody>
           {#each weekZones as z}
-            <tr><td class="ellipsis" style="max-width:9em">{zoneName(cache.zones, z)}</td>{#each weekCols as w}<td class="num">{weekMin(z, w)}</td>{/each}</tr>
+            <tr
+              ><td class="ellipsis" style="max-width:9em">{zoneName(cache.zones, z)}</td>{#each weekCols as w}<td
+                  class="num">{weekMin(z, w)}</td
+                >{/each}</tr
+            >
           {/each}
         </tbody>
       </table>
@@ -117,11 +144,17 @@
             <span class="tnum small muted" style="width:3.2em">{clock(r.start || r.planned_start, tz)}</span>
             <div class="grow">
               <div class="ellipsis">{zoneName(cache.zones, r.zone_id)}</div>
-              <div class="small muted ellipsis">{programName(cache.programs, r.program_id)}{r.scale_pct !== 100 ? ` · ${t('scaled')} ${r.scale_pct}%` : ''}</div>
+              <div class="small muted ellipsis">
+                {programName(cache.programs, r.program_id)}{r.scale_pct !== 100
+                  ? ` · ${t('scaled')} ${r.scale_pct}%`
+                  : ''}
+              </div>
             </div>
             <div style="text-align:right">
               <div class="tnum">{dur(r.actual_seconds)}</div>
-              {#if r.outcome !== 'done'}<span class="chip small {outcomeClass(r.outcome)}">{t(('outcome_' + r.outcome) as Key)}</span>{/if}
+              {#if r.outcome !== 'done'}<span class="chip small {outcomeClass(r.outcome)}"
+                  >{t(('outcome_' + r.outcome) as Key)}</span
+                >{/if}
             </div>
           </li>
         {/each}
@@ -130,15 +163,29 @@
   {:else}
     <p class="muted">{t('no_runs')}</p>
   {/each}
-  {#if more && runs.length}<div style="margin-top:12px"><button onclick={() => loadRuns(false)}>{t('load_more')}</button></div>{/if}
+  {#if more && runs.length}<div style="margin-top:12px">
+      <button onclick={() => loadRuns(false)}>{t('load_more')}</button>
+    </div>{/if}
 {:else}
   <div class="card">
     <ul class="list">
       {#each events as e (e.id)}
         <li class="row">
-          <span class="tnum small muted" style="white-space:nowrap">{new Date(e.time).toLocaleString(locale(), { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-          <span class="grow"><strong>{e.kind.replace(/_/g, ' ')}</strong>
-            {#if e.detail && Object.keys(e.detail).length}<span class="small muted"> {JSON.stringify(e.detail)}</span>{/if}</span>
+          <span class="tnum small muted" style="white-space:nowrap"
+            >{new Date(e.time).toLocaleString(locale(), {
+              timeZone: tz,
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}</span
+          >
+          <span class="grow"
+            ><strong>{e.kind.replace(/_/g, ' ')}</strong>
+            {#if e.detail && Object.keys(e.detail).length}<span class="small muted">
+                {JSON.stringify(e.detail)}</span
+              >{/if}</span
+          >
         </li>
       {:else}
         <li class="muted">{t('events_none')}</li>

@@ -54,9 +54,12 @@ export function timeSpecLabel(s: string): string {
 
 export function startSummary(r: StartRule): string {
   switch (r.kind) {
-    case 'fixed': return (r.times || []).map(timeSpecLabel).join(', ')
-    case 'solar': return timeSpecLabel(`${r.event}${r.offset_min ? (r.offset_min > 0 ? '+' : '') + r.offset_min : ''}`)
-    case 'repeat': return `${timeSpecLabel(r.first || '')} +${r.count}× ${r.every_min} ${t('min')}`
+    case 'fixed':
+      return (r.times || []).map(timeSpecLabel).join(', ')
+    case 'solar':
+      return timeSpecLabel(`${r.event}${r.offset_min ? (r.offset_min > 0 ? '+' : '') + r.offset_min : ''}`)
+    case 'repeat':
+      return `${timeSpecLabel(r.first || '')} +${r.count}× ${r.every_min} ${t('min')}`
   }
 }
 
@@ -65,7 +68,12 @@ export function daySummary(p: Program): string {
   let s = ''
   if (r.kind === 'weekdays') {
     const d = r.days || []
-    s = d.length === 7 ? t('every_day') : WEEKDAYS.filter((w) => d.includes(w)).map((w) => t(w)).join(', ')
+    s =
+      d.length === 7
+        ? t('every_day')
+        : WEEKDAYS.filter((w) => d.includes(w))
+            .map((w) => t(w))
+            .join(', ')
   } else if (r.kind === 'interval') {
     s = r.every === 1 ? t('every_day') : `${t('every')} ${r.every} ${t('days_unit')}`
   }

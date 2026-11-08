@@ -275,7 +275,7 @@ func (d *Data) checkSpecialStations(stns, nvm []byte) {
 // decodeStart mirrors ProgramStruct::starttime_decode: returns a time spec
 // string, or "" for an unused slot.
 func decodeStart(v int16) string {
-	u := uint16(v)
+	u := uint16(v) //nolint:gosec // G115: bit-for-bit reinterpretation of the stored field
 	if u&0x8000 != 0 {
 		return ""
 	}
@@ -298,10 +298,10 @@ func decodeStart(v int16) string {
 
 func (d *Data) parsePrograms(nvm []byte, today time.Time) {
 	count := int(nvm[1])
-	max := (programDataSize - 2) / programSize
-	if count > max {
-		d.warn("program count %d > max %d; truncated", count, max)
-		count = max
+	maxPrograms := (programDataSize - 2) / programSize
+	if count > maxPrograms {
+		d.warn("program count %d > max %d; truncated", count, maxPrograms)
+		count = maxPrograms
 	}
 	days := []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 	for i := 0; i < count; i++ {
@@ -350,7 +350,7 @@ func (d *Data) parsePrograms(nvm []byte, today time.Time) {
 		}
 		var st [4]int16
 		for k := range st {
-			st[k] = int16(binary.LittleEndian.Uint16(b[4+2*k:]))
+			st[k] = int16(binary.LittleEndian.Uint16(b[4+2*k:])) //nolint:gosec // G115: on-disk int16
 		}
 		if fixedTimes {
 			var times []string

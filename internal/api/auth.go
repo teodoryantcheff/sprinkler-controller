@@ -54,12 +54,17 @@ func CheckPassword(encoded, pw string) bool {
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want)))
+	if len(want) == 0 || len(want) > 1024 {
+		return false
+	}
+	got := argon2.IDKey([]byte(pw), salt, t, m, p, uint32(len(want))) //nolint:gosec // G115: length bounded above
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
-const cookieName = "sprinkler_session"
-const sessionTTL = 180 * 24 * time.Hour
+const (
+	cookieName = "sprinkler_session"
+	sessionTTL = 180 * 24 * time.Hour
+)
 
 func (s *Server) secret() ([]byte, error) {
 	v, err := s.app.Store.RawSetting("session_secret")
@@ -92,7 +97,8 @@ func (s *Server) setSession(w http.ResponseWriter, r *http.Request, user string)
 	}
 	exp := time.Now().Add(sessionTTL).Unix()
 	payload := base64.RawURLEncoding.EncodeToString([]byte(user)) + "." + strconv.FormatInt(exp, 10)
-	http.SetCookie(w, &http.Cookie{
+	// Secure only over HTTPS: the UI is also served over plain HTTP on the LAN.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: see above
 		Name: cookieName, Value: payload + "." + sign(sec, payload), Path: "/",
 		Expires: time.Unix(exp, 0), HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
 	})
@@ -100,7 +106,7 @@ func (s *Server) setSession(w http.ResponseWriter, r *http.Request, user string)
 }
 
 func clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode}) //nolint:gosec // G124: deletes the cookie
 }
 
 // sessionUser returns the logged-in user name, or "".

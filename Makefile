@@ -1,8 +1,10 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 GO ?= go
+GOBIN := $(shell $(GO) env GOPATH)/bin
+export PATH := $(GOBIN):$(PATH)
 
-.PHONY: all web build cross test vet check run import clean
+.PHONY: all web build cross test vet fmt lint vuln tools hooks check run import clean
 
 all: web build
 
@@ -24,7 +26,30 @@ vet:
 test:
 	$(GO) test ./...
 
-check: vet test
+# Format everything in place: gofumpt + goimports (via golangci-lint), Prettier.
+fmt:
+	golangci-lint fmt ./...
+	cd web && npm run format
+
+# Check formatting and lint without changing files (the pre-commit hook runs the same).
+lint:
+	golangci-lint fmt --diff ./...
+	golangci-lint run ./...
+	cd web && npm run lint
+
+vuln:
+	govulncheck ./...
+
+# Install the Go lint tools into $(GOBIN).
+tools:
+	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
+
+# Use the repo's git hooks (pre-commit: format check + lint). Run once per clone.
+hooks:
+	git config core.hooksPath .githooks
+
+check: lint vet test vuln
 	cd web && npm run check
 
 # Local development: import the OpenSprinkler copy, then serve with the sim driver.

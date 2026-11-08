@@ -47,7 +47,7 @@ func (s *Server) caCert(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 	w.Header().Set("Content-Disposition", `attachment; filename="sprinkler-ca.crt"`)
-	w.Write(s.caPEM)
+	_, _ = w.Write(s.caPEM)
 }
 
 // New builds the handler.
@@ -123,13 +123,13 @@ func (s *Server) reply(w http.ResponseWriter, v any, err error) {
 			s.log.Error("api", "err", err)
 		}
 		w.WriteHeader(code)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 	if v == nil {
 		v = map[string]bool{"ok": true}
 	}
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func decode(r *http.Request, v any) error {
@@ -237,8 +237,10 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) (any, error) {
 	}
 	u, ok := s.authorized(r)
 	st, _, _, _ := s.app.Snapshot()
-	return map[string]any{"user": u, "logged_in": ok, "setup_required": n == 0, "language": st.Language, "device_name": st.DeviceName,
-		"https": r.TLS != nil, "ca_available": len(s.caPEM) > 0}, nil
+	return map[string]any{
+		"user": u, "logged_in": ok, "setup_required": n == 0, "language": st.Language, "device_name": st.DeviceName,
+		"https": r.TLS != nil, "ca_available": len(s.caPEM) > 0,
+	}, nil
 }
 
 // MinPassword is the shortest accepted password, in characters (also used by "sprinkler passwd").
