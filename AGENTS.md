@@ -9,19 +9,41 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
 ## Status
 
 - Spec written (2026-11-07).
-- **Phase 0 (import) and Phase 1 (core) implemented (2026-11-08)**: they run locally with the `sim` driver; `go vet`, `go test` and `svelte-check` are clean. Nothing is installed on the Pi.
-- **Next: review the import against the OpenSprinkler UI (the Phase 0 gate), then do a 72 h soak with sim/LEDs, then Shadow.** Shadow config: `deploy/sprinklerpi.toml` (sim driver, sim sensor, port 8090).
-- Decisions from the user: zone names come from the live system (read from `nvm.dat`); no master valve; one rain sensor. Remaining open questions are at the end of `SPEC.md`.
+- Phase 0 (import) and Phase 1 (core) implemented (2026-11-08).
+- **Cutover done 2026-11-08, at the user's request, without the 14-day Shadow run.** On `sprinklerpi`:
+  - The new controller runs as systemd service `sprinkler` (HTTP :80 and HTTPS :443 with a local CA in `/var/lib/sprinkler/tls`, `shiftreg` driver, real rain sensor on GPIO 14), with config `/etc/sprinkler/sprinkler.toml` (= `deploy/sprinklerpi.toml`) and DB `/var/lib/sprinkler/sprinkler.db`.
+  - OpenSprinkler and OSPy are stopped and disabled at boot (`K01` links), with files untouched.
+  - Data backup: `~/opensprinkler-2026-11-08.tgz`.
+  - All programs are imported disabled (off-season).
+  - Updating the Pi: cross-build armv6, copy to `/tmp`, keep the previous binary as `/usr/local/bin/sprinkler.prev` (and the config as `.prev`), install, `systemctl restart sprinkler`. Check first that nothing is watering (`journalctl -u sprinkler | grep run`): a restart closes all valves.
+- **Open:** verify each zone with a 1-minute test in the garden, test the rollback once, then one week of correct watering closes the Cutover gate (`SPEC.md`). Planned-vs-actual comparison with OpenSprinkler's logs is no longer possible going forward; compare against the 2026 season logs instead.
+- Runbook (install, stash, rollback) is in `README.md`; dev server docs are there too. Remaining open questions are at the end of `SPEC.md`.
 
 ## The live controller — handle with care
 
 `sprinklerpi` waters a real garden. It is production hardware.
 
-- SSH: `ssh pi@192.168.1.20` (key auth, passwordless sudo).
-- **Read-only by default.** Do not stop, restart or disable `OpenSprinkler` or `ospy`, edit their data, reboot, or touch GPIO on the Pi without the user's explicit go-ahead for that specific action.
-- Never run the new controller on the Pi with a real hardware driver (`shiftreg` / `gpiorelay`) before the Cutover phase. Shadow mode uses `sim` only.
+- SSH: `ssh pi@192.168.1.20` (key auth, passwordless sudo). The key has a passphrase. If you get `Permission denied (publickey)`, the ssh-agent is empty: ask the user to run `! ssh-add` rather than trying other keys or passwords.
+- **Read-only by default.** Do not start, stop, enable or disable `sprinkler`, `OpenSprinkler` or `ospy`, edit their data, reboot, or touch GPIO on the Pi without the user's explicit go-ahead for that specific action.
+- The new controller now owns the valves on the Pi (`sprinkler` service). Restarting it is safe (it starts all-off), but opening a valve (zone tests, manual runs, enabling programs) needs the user's go-ahead. Do not start OpenSprinkler or OSPy while `sprinkler` runs: that is the rollback, and it starts by stopping `sprinkler`.
 - Do not try passwords against the OpenSprinkler API (e.g. the default one). Read its data from files instead.
 - The Pi is a Pi 1 (700 MHz, single core, 512 MB): keep remote commands light; don't build on it — cross-compile locally.
+
+## Taking over from OpenSprinkler (Shadow and Cutover)
+
+The step-by-step runbook is in `README.md` under "Taking over from OpenSprinkler on the Pi": build and copy, install in shadow mode, stash OpenSprinkler and OSPy, switch to `shiftreg`, roll back. Rules for agents:
+
+- Every step that runs on the Pi needs the user's explicit go-ahead for that step: installing the service, stopping or disabling OpenSprinkler or OSPy, unexporting GPIO, switching the driver. Approval for one step doesn't cover the next.
+- "Stash" means stop and disable, never delete or edit: `/home/pi/OpenSprinklerGen2/` (binary, `nvm.dat`, `stns.dat`, `logs/`), its init script and OSPy stay untouched, so the rollback just starts them again.
+- Before stopping OpenSprinkler, confirm nothing is watering. It may not switch the outputs off on exit, and only the new service's start-up all-off clears them.
+- Import into a database on the laptop from a fresh `rsync` copy, then copy the `.db` to the Pi. Don't run the importer on the Pi 1, and never point it at the live directory.
+- The runbook's facts were checked read-only on 2026-11-08:
+  - Units are `OpenSprinkler` (script `/etc/init.d/OpenSprinkler.sh`) and `ospy` (script `/etc/init.d/ospy`). Both run as root and both start at boot.
+  - Disable them with `update-rc.d <script name>`, not `systemctl disable`.
+  - GPIO 4, 14, 15, 17, 22 and 27 are exported via sysfs and must be unexported after the stop.
+  - `/dev/gpiochip0` is `root:gpio 0660`; systemd is 241.
+  - If anything differs when you get there, re-check and fix the runbook.
+- Record each completed phase in **Status** above.
 
 ## Where the source data lives (on the Pi)
 
@@ -42,7 +64,7 @@ A full SD card image backup is at `/home/teo/backups/sprinklerpi-2026-11-07.img.
 - Valve board: 74HC595 shift register, BCM GPIO latch 22, data 27, clock 4, output-enable 17 (OE active-low; high = outputs off). 8 outputs; zones 1–5 and 7 in use.
 - Rain sensor: one, on GPIO 14, normally open, with the internal pull-up (reads 1 = dry). Confirmed by the user and by `nvm.dat` (sensor 1 type = rain, option = NO); the logs contain real `rs` events from June/July 2026. In the running 2.1.8 build, GPIO 23 is *button 1*, not sensor 2 (sensor 2 is a 2.1.9 feature). RF TX on 15 is unused.
 - No master valve (option `mas` = 0).
-- OSPy also drives the same shift-register pins (BOARD numbering 7/11/13/15). Its scheduler is disabled, but it holds the pins — the new service must refuse to start if another process owns the lines.
+- OSPy also drives the same shift-register pins (BOARD numbering 7/11/13/15). Its scheduler is disabled, but the service is running (`ospy`, `python run.py` as root) and holds the pins. The new service must refuse to start if another process owns the lines.
 
 ## OpenSprinkler 2.1.8 data quirks (learned during Phase 0)
 
