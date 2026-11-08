@@ -138,6 +138,8 @@ Eight SQLite tables hold all state; schema changes ship as numbered migrations i
 | `settings` | key, value (JSON) | Location, time zone, master zone, delays, rain delay until, active providers |
 | `users` | id, name, password_hash (argon2id), created | One admin by default; sessions in signed cookies |
 
+**Retention:** finished `runs` and `events` older than 6 months are deleted once a day (only after the clock has synced). Open runs are never pruned. This includes the imported OpenSprinkler history: the original logs stay in `~/opensprinkler-2026-11-08.tgz` and `/home/pi/OpenSprinklerGen2/logs/`.
+
 **Rule shapes**
 
 ```

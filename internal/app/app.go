@@ -44,6 +44,7 @@ type App struct {
 	loc      *time.Location
 
 	lastPlan  time.Time
+	lastPrune time.Time
 	sensorRaw bool
 	rawSince  time.Time
 	sensorWet bool
@@ -374,6 +375,26 @@ func (a *App) SetRainDelay(hours float64) error {
 	return nil
 }
 
+// Retention is how long finished runs and events are kept.
+const Retention = 6 // months
+
+// PruneTick drops history older than Retention, at most once a day and
+// only with a trusted clock (a clock far in the future would wipe it).
+func (a *App) PruneTick(now time.Time) {
+	if !a.clockOK.Load() || (!a.lastPrune.IsZero() && now.Sub(a.lastPrune) < 24*time.Hour) {
+		return
+	}
+	a.lastPrune = now
+	runs, events, err := a.Store.Prune(now.AddDate(0, -Retention, 0))
+	if err != nil {
+		a.Log.Error("prune history", "err", err)
+		return
+	}
+	if runs+events > 0 {
+		a.Log.Info("pruned old history", "runs", runs, "events", events)
+	}
+}
+
 // Loop runs the planner and sensor until ctx is done.
 func (a *App) Loop(ctx context.Context) {
 	t := time.NewTicker(time.Second)
@@ -386,6 +407,7 @@ func (a *App) Loop(ctx context.Context) {
 			now := a.Clock()
 			a.SensorTick(now)
 			a.PlanTick(now)
+			a.PruneTick(now)
 		}
 	}
 }

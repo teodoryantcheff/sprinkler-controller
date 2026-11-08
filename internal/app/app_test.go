@@ -163,6 +163,44 @@ func TestUpcoming(t *testing.T) {
 	}
 }
 
+func TestPruneTick(t *testing.T) {
+	a, _, st := setup(t)
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, sofia)
+	old := now.AddDate(0, -Retention, -1)
+	add := func() {
+		r := core.Run{ZoneID: 1, PlannedStart: old, Outcome: core.OutcomeDone}
+		if err := st.InsertRun(&r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func() int {
+		rs, _ := st.Runs(store.RunFilter{})
+		return len(rs)
+	}
+	add()
+	a.ClockSynced = func() bool { return false }
+	a.PlanTick(now)
+	a.PruneTick(now)
+	if count() != 1 {
+		t.Fatal("must not prune before the clock is trusted")
+	}
+	a.ClockSynced = func() bool { return true }
+	a.PlanTick(now)
+	a.PruneTick(now)
+	if count() != 0 {
+		t.Fatal("run older than retention should be pruned")
+	}
+	add()
+	a.PruneTick(now.Add(time.Hour))
+	if count() != 1 {
+		t.Fatal("prune runs at most once a day")
+	}
+	a.PruneTick(now.Add(25 * time.Hour))
+	if count() != 0 {
+		t.Fatal("next day's prune should run")
+	}
+}
+
 func TestClockWaitsForSync(t *testing.T) {
 	a, sim, st := setup(t)
 	synced := false

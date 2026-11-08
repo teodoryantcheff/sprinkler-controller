@@ -629,6 +629,24 @@ func (s *Store) AddEvent(t time.Time, kind string, detail any) error {
 	return err
 }
 
+// Prune deletes finished runs planned before t and events older than t,
+// and returns how many rows of each went. Open runs are kept.
+func (s *Store) Prune(t time.Time) (runs, events int64, err error) {
+	res, err := s.DB.Exec("DELETE FROM runs WHERE planned_start < ? AND outcome <> ''", unix(t))
+	if err != nil {
+		return 0, 0, err
+	}
+	if runs, err = res.RowsAffected(); err != nil {
+		return 0, 0, err
+	}
+	res, err = s.DB.Exec("DELETE FROM events WHERE time < ?", unix(t))
+	if err != nil {
+		return runs, 0, err
+	}
+	events, err = res.RowsAffected()
+	return runs, events, err
+}
+
 // Events lists events newest first.
 func (s *Store) Events(before time.Time, limit int) ([]core.Event, error) {
 	if limit <= 0 || limit > 1000 {
