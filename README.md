@@ -43,5 +43,6 @@ make cross          # dist/sprinkler-{armv6,armv7,arm64,amd64}
 | [SPEC.md](SPEC.md) | Scope, data model, scheduling and safety rules |
 | [docs/development.md](docs/development.md) | Dev server, commands, build and test, code layout |
 | [docs/raspberry-pi.md](docs/raspberry-pi.md) | Installing on a Pi in place of OpenSprinkler, and rolling back |
+| [docs/API.md](docs/API.md) | HTTP API reference, also served by the app at `/api/docs` |
 | [docs/phone.md](docs/phone.md) | Trusting the certificate and adding the app to a phone's home screen |
 | [AGENTS.md](AGENTS.md) | Notes for coding agents, and the live install's status |

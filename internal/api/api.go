@@ -151,6 +151,8 @@ func pathID(r *http.Request) (int64, error) {
 func (s *Server) routes() {
 	m := s.mux
 	m.HandleFunc("GET /ca.crt", s.caCert)
+	m.HandleFunc("GET /api/docs", s.apiDocs)
+	m.HandleFunc("GET /api/docs.md", s.apiDocsMarkdown)
 	m.HandleFunc("GET /api/me", s.open(s.me))
 	m.HandleFunc("POST /api/setup", s.open(s.setup))
 	m.HandleFunc("POST /api/login", s.open(s.login))

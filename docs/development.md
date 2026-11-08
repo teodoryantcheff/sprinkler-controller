@@ -98,7 +98,7 @@ internal/runner/    queue + state machine; the only package that touches outputs
 internal/hw/        sim, shiftreg (74HC595), gpiorelay drivers; sensor input
 internal/app/       minute planner loop, sensor debouncing, crash recovery, live updates
 internal/store/     SQLite schema, migrations, queries
-internal/api/       JSON API, SSE (/api/stream), auth, embedded UI
+internal/api/       JSON API (docs/API.md), SSE (/api/stream), auth, embedded UI
 internal/importos/  OpenSprinkler 2.1.8 nvm.dat / stns.dat / logs importer
 web/                Svelte 5 + TypeScript UI (≈43 KB gzipped)
 deploy/             dev.toml, sprinklerpi.toml (the Pi), systemd unit
