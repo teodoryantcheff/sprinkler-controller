@@ -114,6 +114,15 @@ func (r *Runner) Configure(zones []core.Zone, s core.Settings) {
 	for _, z := range zones {
 		r.zones[z.ID] = z
 	}
+	// Queued and running items follow zone edits at once (a lower
+	// max_minutes or a moved output applies on the next tick).
+	for _, l := range r.lanes {
+		for _, it := range l.items {
+			if z, ok := r.zones[it.zone.ID]; ok {
+				it.zone = z
+			}
+		}
+	}
 	r.settings = s
 	if loc, err := s.Location(); err == nil {
 		r.loc = loc
@@ -702,14 +711,23 @@ func (r *Runner) faultLocked(now time.Time, cause error) {
 	_ = r.store.AddEvent(now, "output_error", map[string]any{"error": cause.Error()})
 }
 
+// signature summarises what the UI shows, to tell whether a tick changed
+// anything. It runs twice a second, so it avoids fmt.
 func (r *Runner) signature() string {
-	s := fmt.Sprint(r.paused, r.fault, r.masterOn)
+	b := make([]byte, 0, 64)
+	b = strconv.AppendBool(b, r.paused)
+	b = strconv.AppendBool(b, r.masterOn)
+	b = append(b, r.fault...)
+	b = append(b, 0)
 	for _, k := range r.laneKeys() {
 		for _, it := range r.lanes[k].items {
-			s += fmt.Sprint(it.run.ID, it.state)
+			b = strconv.AppendInt(b, it.run.ID, 10)
+			b = append(b, ':')
+			b = strconv.AppendInt(b, int64(it.state), 10)
+			b = append(b, ',')
 		}
 	}
-	return s
+	return string(b)
 }
 
 func (r *Runner) changed() {
