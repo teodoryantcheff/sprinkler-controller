@@ -2,7 +2,7 @@
 
 This runbook parks OpenSprinkler and OSPy without deleting anything, and runs this controller on the real valves in their place. You can roll back in a minute. Do it on a dry week or out of season. Every command on the Pi is yours to run, or an agent's only with your explicit go-ahead for that step (see [`AGENTS.md`](../AGENTS.md)).
 
-On 2026-11-08 this was carried out at the user's request without the 14-day shadow run. The service was installed directly with the real-valve config from step 4, then the old controllers were stashed (step 3). The zone tests in step 4 and a test of the rollback are still to do.
+On 2026-11-08 this was carried out at the user's request without the 14-day shadow run. The service was installed directly with the real-valve config from step 4, then the old controllers were stashed (step 3). The zone tests in step 4 and the rollback test were done on 2026-11-09. For later updates, see [Updating](#updating).
 
 ## 0. Before you start
 
@@ -104,6 +104,26 @@ The service starts with every valve off. Then, in the UI at http://192.168.1.20:
 The gate to finish the Cutover phase is one week of correct watering, and the rollback below tested once.
 
 The installed config (`deploy/sprinklerpi.toml`) serves HTTP on port 80, as OpenSprinkler did, and HTTPS on 443 (`[tls] listen`). The unit grants `CAP_NET_BIND_SERVICE`, so the service binds those ports without running as root.
+
+## Updating
+
+From the laptop, with the SSH key loaded (`ssh-add`):
+
+```sh
+make deploy-check   # build the UI and armv6 binary, copy to /tmp on the Pi, check; installs nothing
+make deploy         # the same checks, then install and restart after a y/N prompt
+```
+
+`deploy/update.sh` does this:
+
+1. It copies `dist/sprinkler-armv6`, `deploy/sprinklerpi.toml` and `deploy/sprinkler.service` to `/tmp/sprinkler-update` on the Pi.
+2. It runs the new binary there (`version`), which catches a wrong architecture before anything is replaced.
+3. It runs `sprinkler busy -config /etc/sprinkler/sprinkler.toml` with the new binary, as the `sprinkler` user. This reads the live database read-only, with no migrations. If any run is watering or queued, the script stops: a restart closes every valve.
+4. It shows `diff -u` for the config and unit when they differ from what is installed.
+5. After the prompt (skip it with `deploy/update.sh -y`), it installs over the current binary, config and unit, with no `.prev` copies. It runs `daemon-reload` if the unit changed and restarts `sprinkler`.
+6. It waits for the journal line `msg=listening ... version=<new>`. If that line doesn't appear, it prints the log and fails. The valves stay off while the service is down.
+
+Use another host with `HOST=pi@sprinklerpi.local make deploy`. To roll back a bad update, check out the previous commit and run `make deploy` again.
 
 ## Rollback to OpenSprinkler
 

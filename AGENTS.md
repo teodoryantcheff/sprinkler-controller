@@ -15,8 +15,9 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
   - OpenSprinkler and OSPy are stopped and disabled at boot (`K01` links), with files untouched.
   - Data backup: `~/opensprinkler-2026-11-08.tgz`.
   - All programs are imported disabled (off-season).
-  - Updating the Pi: cross-build armv6, copy to `/tmp`, install over the current binary and config (no `.prev` copies), `systemctl restart sprinkler`. Check first that nothing is watering (`journalctl -u sprinkler | grep run`): a restart closes all valves.
-- **Open:** verify each zone with a 1-minute test in the garden, test the rollback once, then one week of correct watering closes the Cutover gate (`SPEC.md`). Planned-vs-actual comparison with OpenSprinkler's logs is no longer possible going forward; compare against the 2026 season logs instead.
+  - Updating the Pi: `make deploy` (`deploy/update.sh`, see `docs/raspberry-pi.md#updating`). It installs over the current binary and config (no `.prev` copies) and refuses while anything is watering or queued (`sprinkler busy`): a restart closes all valves. `make deploy-check` copies to `/tmp` on the Pi and checks without installing. Running either one on the Pi needs the user's go-ahead.
+- **Cutover gate closed 2026-11-09** (user confirmed): zone tests in the garden and the rollback test are done.
+- Since 2026-11-09: scheduled programs wait for the first NTP sync after start-up (no RTC), and finished runs and events older than 6 months are pruned daily. This includes the imported 2026 OpenSprinkler history; the raw logs stay in the backup tgz and on the Pi.
 - Runbook (install, stash, rollback) is in `docs/raspberry-pi.md`; dev server docs are in `docs/development.md`, phone setup in `docs/phone.md`. Remaining open questions are at the end of `SPEC.md`.
 
 ## The live controller — handle with care
