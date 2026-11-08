@@ -2,8 +2,9 @@
   import { onMount } from 'svelte'
   import { api, cache, loadPrograms, loadZones, live, type Run } from '../lib/api.svelte'
   import { t, locale, type Key } from '../lib/i18n.svelte'
-  import { dur, clock, dateLabel, zoneName, programName } from '../lib/format'
+  import { dur, clock, dateLabel, when, zoneName, programName } from '../lib/format'
   import { toast, errMsg } from '../lib/ui.svelte'
+  import Icon from '../lib/Icon.svelte'
 
   type Ev = { id: number; time: string; kind: string; detail: Record<string, unknown> }
   type Week = { week: string; zone_id: number; minutes: number }
@@ -73,6 +74,60 @@
     return m ? Math.round(m) : ''
   }
 
+  function eventKind(kind: string) {
+    const k = ('ev_' + kind) as Key
+    const s = t(k)
+    return s === k ? kind.replace(/_/g, ' ') : s
+  }
+
+  // Event detail as short readable parts: names instead of ids, local times.
+  function eventDetail(d: Record<string, unknown> | null): string {
+    if (!d) return ''
+    const at = (v: unknown) => when(String(v), tz, new Date(), true)
+    const out: string[] = []
+    for (const [k, v] of Object.entries(d)) {
+      switch (k) {
+        case 'zone_id':
+          out.push(zoneName(cache.zones, Number(v)))
+          break
+        case 'program_id':
+          out.push(programName(cache.programs, Number(v)))
+          break
+        case 'planned':
+          out.push(`${t('planned')} ${at(v)}`)
+          break
+        case 'from':
+          out.push(`${at(v)} → ${at(d.to)}`)
+          break
+        case 'to':
+          break
+        case 'cap_minutes':
+        case 'max_minutes':
+          out.push(`≤ ${v} ${t('min')}`)
+          break
+        case 'hours':
+          out.push(`${v} ${t('hours_short')}`)
+          break
+        case 'open_runs':
+          out.push(`${t('open_runs')}: ${v}`)
+          break
+        case 'zones':
+        case 'programs':
+          out.push(`${t(k)}: ${v}`)
+          break
+        case 'sensor':
+          out.push(v === 'soil' ? t('soil') : t('rain'))
+          break
+        case 'reason':
+          out.push(v === 'controller_off' ? t('reason_controller_off') : String(v))
+          break
+        default:
+          out.push(typeof v === 'object' ? JSON.stringify(v) : String(v))
+      }
+    }
+    return out.join(' · ')
+  }
+
   const outcomes = ['done', 'stopped', 'skipped_rain', 'skipped_sensor', 'skipped_short', 'cut_max', 'error']
   function outcomeClass(o: string) {
     return o === 'done' ? 'ok' : o === 'error' ? 'bad' : o.startsWith('skipped') || o === 'cut_max' ? 'warn' : ''
@@ -82,20 +137,27 @@
 <header class="top">
   <h1>{t('history')}</h1>
   <div class="seg" role="group">
-    <button aria-pressed={tab === 'runs'} onclick={() => (tab = 'runs')}>{t('runs_tab')}</button>
+    <button
+      aria-pressed={tab === 'runs'}
+      aria-label={t('runs_tab')}
+      title={t('runs_tab')}
+      onclick={() => (tab = 'runs')}><Icon name="droplet" size={20} />{t('runs_tab')}</button
+    >
     <button
       aria-pressed={tab === 'events'}
+      aria-label={t('events_tab')}
+      title={t('events_tab')}
       onclick={() => {
         tab = 'events'
         loadEvents()
-      }}>{t('events_tab')}</button
+      }}><Icon name="activity" size={20} />{t('events_tab')}</button
     >
   </div>
 </header>
 
 {#if tab === 'runs'}
   {#if weekCols.length}
-    <h2>{t('minutes_per_week')}</h2>
+    <h2><Icon name="calendar" />{t('minutes_per_week')}</h2>
     <div class="card" style="overflow-x:auto">
       <table>
         <thead
@@ -118,8 +180,8 @@
     </div>
   {/if}
 
-  <h2>{t('runs_tab')}</h2>
-  <div class="row wrap-row" style="margin-bottom:10px">
+  <h2><Icon name="list" />{t('runs_tab')}</h2>
+  <div class="row wrap-row filters" style="margin-bottom:10px">
     <select bind:value={zone} onchange={() => loadRuns()} style="width:auto">
       <option value="">{t('all_zones')}</option>
       {#each cache.zones as z}<option value={String(z.id)}>{z.name}</option>{/each}
@@ -164,7 +226,7 @@
     <p class="muted">{t('no_runs')}</p>
   {/each}
   {#if more && runs.length}<div style="margin-top:12px">
-      <button onclick={() => loadRuns(false)}>{t('load_more')}</button>
+      <button style="width:100%" onclick={() => loadRuns(false)}><Icon name="history" />{t('load_more')}</button>
     </div>{/if}
 {:else}
   <div class="card">
@@ -181,10 +243,8 @@
             })}</span
           >
           <span class="grow"
-            ><strong>{e.kind.replace(/_/g, ' ')}</strong>
-            {#if e.detail && Object.keys(e.detail).length}<span class="small muted">
-                {JSON.stringify(e.detail)}</span
-              >{/if}</span
+            ><strong>{eventKind(e.kind)}</strong>
+            {#if eventDetail(e.detail)}<span class="small muted"> · {eventDetail(e.detail)}</span>{/if}</span
           >
         </li>
       {:else}
@@ -193,3 +253,9 @@
     </ul>
   </div>
 {/if}
+
+<style>
+  .filters select {
+    flex: 1 1 140px;
+  }
+</style>
