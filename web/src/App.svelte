@@ -102,10 +102,10 @@
     {:else if route.path === '/settings'}
       <Settings />
     {:else}
-      <p>Not found. <a href="#/">{t('home')}</a></p>
+      <p>{t('not_found')} <a href="#/">{t('home')}</a></p>
     {/if}
   </main>
-  <nav class="tabs" aria-label="Main">
+  <nav class="tabs" aria-label={t('main_nav')}>
     {#each tabs as tab}
       <a href={'#' + tab.path} aria-current={section === tab.path ? 'page' : undefined}>
         <span class="pill"><Icon name={tab.icon} size={28} /></span>

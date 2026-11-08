@@ -59,7 +59,7 @@
       await loadPrograms()
       const found = cache.programs.find((x) => x.id === Number(id))
       if (!found) {
-        error = 'Not found'
+        error = t('not_found')
         return
       }
       const copy: Program = JSON.parse(JSON.stringify(found))
@@ -354,6 +354,7 @@
             bind:value={p.start_rule.every_min}
             required
           /><span>{t('min')},</span>
+          {#if t('more_times_pre')}<span>{t('more_times_pre')}</span>{/if}
           <input type="number" min="0" max="1440" bind:value={p.start_rule.count} required /><span
             >{t('more_times')}</span
           >
@@ -379,8 +380,12 @@
       >
         {#each p.zones as pz, i (pz.zone_id)}
           <li class="row" style="gap:6px" data-zi={i} class:dragging={dragIndex === i}>
-            <span class="drag" onpointerdown={(e) => onPointerDown(i, e)} role="button" tabindex="-1" aria-label="drag"
-              ><Icon name="grip" /></span
+            <span
+              class="drag"
+              onpointerdown={(e) => onPointerDown(i, e)}
+              role="button"
+              tabindex="-1"
+              aria-label={t('drag')}><Icon name="grip" /></span
             >
             <div class="grow">
               <div style="overflow-wrap:anywhere;font-weight:600">{zoneName(cache.zones, pz.zone_id)}</div>
@@ -402,8 +407,8 @@
             <button
               type="button"
               class="icon-btn ghost"
-              aria-label="up"
-              title="↑"
+              aria-label={t('move_up')}
+              title={t('move_up')}
               onclick={() => move(i, -1)}
               disabled={i === 0}><Icon name="up" /></button
             >

@@ -111,7 +111,9 @@
     >
     <button class="chip {s.rain_delay_until ? 'warn' : ''}" onclick={() => rainDialog.showModal()}>
       <Icon name="rain" />
-      {s.rain_delay_until ? t('rain_delay_until', { t: when(s.rain_delay_until, tz) }) : t('no_rain_delay')}
+      {s.rain_delay_until
+        ? t('rain_delay_until', { t: when(s.rain_delay_until, tz, new Date(serverNow), true) })
+        : t('no_rain_delay')}
     </button>
     {#if s.sensor.enabled}
       <span class="chip {s.sensor.wet ? 'warn' : 'ok'}"

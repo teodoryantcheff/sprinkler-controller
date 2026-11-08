@@ -27,14 +27,16 @@ function dayKey(d: Date, tz: string) {
   return d.toLocaleDateString('en-CA', { timeZone: tz })
 }
 
-export function when(iso: string, tz: string, now = new Date()): string {
+// inline: the result goes mid-sentence, so "today"/"tomorrow" are lower case.
+export function when(iso: string, tz: string, now = new Date(), inline = false): string {
   const d = new Date(iso)
   const k = dayKey(d, tz)
   const today = dayKey(now, tz)
   const tomorrow = dayKey(new Date(now.getTime() + 86400000), tz)
+  const word = (w: string) => (inline ? w.toLocaleLowerCase(locale()) : w)
   let day: string
-  if (k === today) day = t('today')
-  else if (k === tomorrow) day = t('tomorrow')
+  if (k === today) day = word(t('today'))
+  else if (k === tomorrow) day = word(t('tomorrow'))
   else day = d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: tz })
   return `${day} ${clock(iso, tz)}`
 }
@@ -85,7 +87,9 @@ export function daySummary(p: Program): string {
 export function programSummary(p: Program, zones: Zone[]): string {
   const zn = (id: number) => zones.find((z) => z.id === id)?.name ?? `#${id}`
   const z = p.zones.map((pz) => `${zn(pz.zone_id)} ${minutes(pz.seconds)}`).join(' → ')
-  return `${daySummary(p)} ${t('at')} ${startSummary(p.start_rule)} · ${z}`
+  const start = startSummary(p.start_rule)
+  const at = /^\d/.test(start) ? t('at') : t('at_sun')
+  return `${daySummary(p)} ${at} ${start} · ${z}`
 }
 
 export function zoneName(zones: Zone[], id: number): string {

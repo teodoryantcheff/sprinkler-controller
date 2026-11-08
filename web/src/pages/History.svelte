@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { api, cache, loadPrograms, loadZones, live, type Run } from '../lib/api.svelte'
   import { t, locale, type Key } from '../lib/i18n.svelte'
-  import { dur, clock, dateLabel, zoneName, programName } from '../lib/format'
+  import { dur, clock, dateLabel, when, zoneName, programName } from '../lib/format'
   import { toast, errMsg } from '../lib/ui.svelte'
   import Icon from '../lib/Icon.svelte'
 
@@ -72,6 +72,60 @@
   function weekMin(z: number, w: string) {
     const m = weeks.find((x) => x.zone_id === z && x.week === w)?.minutes
     return m ? Math.round(m) : ''
+  }
+
+  function eventKind(kind: string) {
+    const k = ('ev_' + kind) as Key
+    const s = t(k)
+    return s === k ? kind.replace(/_/g, ' ') : s
+  }
+
+  // Event detail as short readable parts: names instead of ids, local times.
+  function eventDetail(d: Record<string, unknown> | null): string {
+    if (!d) return ''
+    const at = (v: unknown) => when(String(v), tz, new Date(), true)
+    const out: string[] = []
+    for (const [k, v] of Object.entries(d)) {
+      switch (k) {
+        case 'zone_id':
+          out.push(zoneName(cache.zones, Number(v)))
+          break
+        case 'program_id':
+          out.push(programName(cache.programs, Number(v)))
+          break
+        case 'planned':
+          out.push(`${t('planned')} ${at(v)}`)
+          break
+        case 'from':
+          out.push(`${at(v)} → ${at(d.to)}`)
+          break
+        case 'to':
+          break
+        case 'cap_minutes':
+        case 'max_minutes':
+          out.push(`≤ ${v} ${t('min')}`)
+          break
+        case 'hours':
+          out.push(`${v} ${t('hours_short')}`)
+          break
+        case 'open_runs':
+          out.push(`${t('open_runs')}: ${v}`)
+          break
+        case 'zones':
+        case 'programs':
+          out.push(`${t(k)}: ${v}`)
+          break
+        case 'sensor':
+          out.push(v === 'soil' ? t('soil') : t('rain'))
+          break
+        case 'reason':
+          out.push(v === 'controller_off' ? t('reason_controller_off') : String(v))
+          break
+        default:
+          out.push(typeof v === 'object' ? JSON.stringify(v) : String(v))
+      }
+    }
+    return out.join(' · ')
   }
 
   const outcomes = ['done', 'stopped', 'skipped_rain', 'skipped_sensor', 'skipped_short', 'cut_max', 'error']
@@ -189,10 +243,8 @@
             })}</span
           >
           <span class="grow"
-            ><strong>{e.kind.replace(/_/g, ' ')}</strong>
-            {#if e.detail && Object.keys(e.detail).length}<span class="small muted">
-                {JSON.stringify(e.detail)}</span
-              >{/if}</span
+            ><strong>{eventKind(e.kind)}</strong>
+            {#if eventDetail(e.detail)}<span class="small muted"> · {eventDetail(e.detail)}</span>{/if}</span
           >
         </li>
       {:else}

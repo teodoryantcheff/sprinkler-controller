@@ -125,7 +125,7 @@
               <span class="small muted" style="display:block">
                 {z.enabled ? '' : t('disabled') + ' · '}{z.group_id
                   ? `${t('group')} ${z.group_id}`
-                  : t('group_hint').split('=')[1]?.trim()}{z.ignore_rain ? ' · ' + t('ignore_rain') : ''}{z.uses_master
+                  : t('parallel')}{z.ignore_rain ? ' · ' + t('ignore_rain') : ''}{z.uses_master
                   ? ' · ' + t('uses_master')
                   : ''} · ≤ {z.max_minutes}
                 {t('min')}
