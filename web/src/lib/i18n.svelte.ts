@@ -53,6 +53,7 @@ const en = {
   restored: 'Restored', hardware: 'Hardware', driver: 'Driver', outputs: 'Outputs', version: 'Version',
   confirm_stop_all: 'Stop every zone and clear the queue?', today: 'Today', tomorrow: 'Tomorrow',
   program: 'Program', zone: 'Zone', events_none: 'No events.',
+  open_of: '{n} of {max} open', waiting_slot: 'waiting',
 }
 export type Key = keyof typeof en
 
@@ -110,6 +111,7 @@ const bg: Record<Key, string> = {
   restored: 'Възстановено', hardware: 'Хардуер', driver: 'Драйвер', outputs: 'Изходи', version: 'Версия',
   confirm_stop_all: 'Да спра ли всички зони и да изчистя опашката?', today: 'Днес', tomorrow: 'Утре',
   program: 'Програма', zone: 'Зона', events_none: 'Няма събития.',
+  open_of: 'отворени {n} от {max}', waiting_slot: 'чака',
 }
 
 export const i18n = $state({ lang: (localStorage.getItem('lang') as 'en' | 'bg') || 'en' })
