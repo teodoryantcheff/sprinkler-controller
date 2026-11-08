@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sprinkler/internal/app"
@@ -31,9 +32,13 @@ var dist embed.FS
 type Server struct {
 	app     *app.App
 	log     *slog.Logger
-	mux     *http.ServeMux
+	handler http.Handler
 	outputs int
 	caPEM   []byte
+
+	secretMu sync.Mutex    // guards creating/rotating the session secret
+	hashSem  chan struct{} // bounds concurrent argon2 runs
+	logins   loginLimiter
 }
 
 // SetCA makes the local CA certificate downloadable at /ca.crt, so phones
@@ -52,15 +57,28 @@ func (s *Server) caCert(w http.ResponseWriter, r *http.Request) {
 
 // New builds the handler.
 func New(a *app.App, outputs int, log *slog.Logger) *Server {
-	s := &Server{app: a, log: log, mux: http.NewServeMux(), outputs: outputs}
-	s.routes()
+	s := &Server{app: a, log: log, outputs: outputs, hashSem: make(chan struct{}, hashSlots)}
+	mux := http.NewServeMux()
+	s.routes(mux)
+	// Refuse cross-site POST/PUT/DELETE (Sec-Fetch-Site / Origin), on top
+	// of SameSite=Strict cookies and JSON-only writes. Tools like curl
+	// send neither header and are let through.
+	s.handler = http.NewCrossOriginProtection().Handler(mux)
 	return s
 }
 
+// contentSecurityPolicy allows only the embedded UI's own files. Svelte
+// sets style attributes, hence 'unsafe-inline' for styles only.
+const contentSecurityPolicy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+	"object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "same-origin")
-	s.mux.ServeHTTP(w, r)
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "same-origin")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", contentSecurityPolicy)
+	s.handler.ServeHTTP(w, r)
 }
 
 type handler func(w http.ResponseWriter, r *http.Request) (any, error)
@@ -148,8 +166,7 @@ func pathID(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (s *Server) routes() {
-	m := s.mux
+func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("GET /ca.crt", s.caCert)
 	m.HandleFunc("GET /api/docs", s.apiDocs)
 	m.HandleFunc("GET /api/docs.md", s.apiDocsMarkdown)
@@ -268,10 +285,17 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) (any, error) {
 	if len([]rune(c.Password)) < MinPassword {
 		return nil, bad("password must be at least %d characters", MinPassword)
 	}
+	if len(c.Password) > maxPassword {
+		return nil, bad("password is too long")
+	}
+	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" {
 		c.Name = "admin"
 	}
-	h, err := HashPassword(c.Password)
+	if len(c.Name) > 64 {
+		return nil, bad("name is too long")
+	}
+	h, err := s.hashPassword(c.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -281,19 +305,35 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) (any, error) {
 	return nil, s.setSession(w, r, c.Name)
 }
 
+// maxPassword bounds the bytes fed to argon2.
+const maxPassword = 1024
+
 func (s *Server) login(w http.ResponseWriter, r *http.Request) (any, error) {
 	var c creds
 	if err := decode(r, &c); err != nil {
 		return nil, err
 	}
+	now := time.Now()
+	if s.logins.blocked(r, now) {
+		return nil, httpError{http.StatusTooManyRequests, "too many failed logins; try again later"}
+	}
 	if c.Name == "" {
 		c.Name = "admin"
 	}
+	var hash string
 	u, err := s.app.Store.UserByName(c.Name)
-	if err != nil || !CheckPassword(u.PasswordHash, c.Password) {
+	switch {
+	case err == nil:
+		hash = u.PasswordHash
+	case !errors.Is(err, sql.ErrNoRows):
+		return nil, err
+	}
+	if len(c.Password) > maxPassword || !s.checkPassword(hash, c.Password) {
+		s.logins.fail(r, now)
 		time.Sleep(700 * time.Millisecond)
 		return nil, httpError{http.StatusUnauthorized, "wrong name or password"}
 	}
+	s.logins.success(r)
 	return nil, s.setSession(w, r, u.Name)
 }
 
@@ -314,18 +354,34 @@ func (s *Server) password(w http.ResponseWriter, r *http.Request) (any, error) {
 	if name == "" {
 		return nil, httpError{http.StatusForbidden, "log in with a password to change it"}
 	}
+	now := time.Now()
+	if s.logins.blocked(r, now) {
+		return nil, httpError{http.StatusTooManyRequests, "too many failed attempts; try again later"}
+	}
 	u, err := s.app.Store.UserByName(name)
-	if err != nil || !CheckPassword(u.PasswordHash, req.Current) {
+	if err != nil || len(req.Current) > maxPassword || !s.checkPassword(u.PasswordHash, req.Current) {
+		s.logins.fail(r, now)
 		return nil, httpError{http.StatusForbidden, "current password is wrong"}
 	}
 	if len([]rune(req.New)) < MinPassword {
 		return nil, bad("password must be at least %d characters", MinPassword)
 	}
-	h, err := HashPassword(req.New)
+	if len(req.New) > maxPassword {
+		return nil, bad("password is too long")
+	}
+	h, err := s.hashPassword(req.New)
 	if err != nil {
 		return nil, err
 	}
-	return nil, s.app.Store.SaveUser(name, h)
+	if err := s.app.Store.SaveUser(name, h); err != nil {
+		return nil, err
+	}
+	// Log out every other session (a stolen cookie stops working), then
+	// give this one a fresh cookie.
+	if err := s.rotateSecret(); err != nil {
+		return nil, err
+	}
+	return nil, s.setSession(w, r, name)
 }
 
 // ---- state
@@ -467,17 +523,8 @@ func (s *Server) saveZone(w http.ResponseWriter, r *http.Request) (any, error) {
 		z.ID = 0
 	}
 	z.Name = strings.TrimSpace(z.Name)
-	if z.Name == "" {
-		return nil, bad("name is required")
-	}
-	if z.OutputIndex < 0 || z.OutputIndex >= s.outputs {
-		return nil, bad("output must be 1–%d", s.outputs)
-	}
-	if z.MaxMinutes < 1 || z.MaxMinutes > 720 {
-		return nil, bad("max minutes must be 1–720")
-	}
-	if z.GroupID < 0 || z.GroupID > 99 {
-		return nil, bad("group must be 0–99")
+	if err := z.Validate(s.outputs); err != nil {
+		return nil, bad("%v", err)
 	}
 	if err := s.app.Store.SaveZone(&z); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
@@ -499,12 +546,11 @@ func (s *Server) listPrograms(w http.ResponseWriter, r *http.Request) (any, erro
 }
 
 func (s *Server) checkProgramZones(p *core.Program) error {
-	_, zones, _, _ := s.app.Snapshot()
+	st, zones, _, _ := s.app.Snapshot()
 	known := map[int64]bool{}
 	for _, z := range zones {
 		known[z.ID] = true
 	}
-	st, _, _, _ := s.app.Snapshot()
 	for _, pz := range p.Zones {
 		if !known[pz.ZoneID] {
 			return bad("unknown zone %d", pz.ZoneID)
@@ -794,30 +840,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) (any, error
 		return nil, err
 	}
 	st.RainDelayUntil = cur.RainDelayUntil // changed through /api/raindelay only
-	if _, err := time.LoadLocation(st.Timezone); err != nil || st.Timezone == "" {
-		return nil, bad("unknown time zone %q", st.Timezone)
-	}
-	switch {
-	case st.Lat < -90 || st.Lat > 90 || st.Lon < -180 || st.Lon > 180:
-		return nil, bad("latitude/longitude out of range")
-	case st.WateringLevelPct < 0 || st.WateringLevelPct > 250:
-		return nil, bad("watering level must be 0–250%%")
-	case st.StationDelayS < 0 || st.StationDelayS > 600:
-		return nil, bad("zone delay must be 0–600 s")
-	case st.MasterOnDelayS < 0 || st.MasterOnDelayS > 600 || st.MasterOffDelayS < 0 || st.MasterOffDelayS > 600:
-		return nil, bad("master delays must be 0–600 s")
-	case st.MaxOpenZones < 1 || st.MaxOpenZones > 16:
-		return nil, bad("max open zones must be 1–16")
-	case st.DailyCapMinutes < 1 || st.DailyCapMinutes > 1440:
-		return nil, bad("daily cap must be 1–1440 min")
-	case st.Sensor.Normally != "open" && st.Sensor.Normally != "closed":
-		return nil, bad("sensor must be normally open or closed")
-	case st.Sensor.Kind != "rain" && st.Sensor.Kind != "soil":
-		return nil, bad("sensor kind must be rain or soil")
-	case st.Sensor.OnDelayS < 0 || st.Sensor.OffDelayS < 0 || st.Sensor.OnDelayS > 86400 || st.Sensor.OffDelayS > 86400:
-		return nil, bad("sensor delays must be 0–86400 s")
-	case st.Language != "en" && st.Language != "bg":
-		return nil, bad("language must be en or bg")
+	if err := st.Validate(); err != nil {
+		return nil, bad("%v", err)
 	}
 	if st.MasterZoneID != 0 {
 		if _, err := s.app.Store.Zone(st.MasterZoneID); err != nil {
@@ -845,9 +869,13 @@ func (s *Server) restore(w http.ResponseWriter, r *http.Request) (any, error) {
 	if err := decode(r, &b); err != nil {
 		return nil, err
 	}
+	// Validate before stopping anything, so a bad file doesn't stop watering.
+	if err := b.Validate(s.outputs); err != nil {
+		return nil, bad("%v", err)
+	}
 	now := s.app.Clock()
 	s.app.Runner.StopAll(now)
-	if err := s.app.Store.Restore(r.Context(), b); err != nil {
+	if err := s.app.Store.Restore(r.Context(), b, s.outputs); err != nil {
 		return nil, bad("%v", err)
 	}
 	_ = s.app.Store.AddEvent(now, "restore", map[string]any{"zones": len(b.Zones), "programs": len(b.Programs)})

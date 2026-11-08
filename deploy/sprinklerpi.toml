@@ -1,16 +1,14 @@
-# sprinklerpi (Pi 1, OSPi-style 74HC595 board). Values read from the live
-# OpenSprinkler 2.1.8 install: shift register on BCM 22/27/4/17, one rain
-# sensor (normally open) on BCM 14.
+# sprinklerpi: Raspberry Pi 1 with a 74HC595 shift-register valve board
+# (BCM 22/27/4/17) and one normally-open rain sensor on BCM 14.
+# Installed on the Pi as /etc/sprinkler/sprinkler.toml.
 #
-# This is the config installed on the Pi at /etc/sprinkler/sprinkler.toml
-# (Cutover 2026-11-08). For a shadow install alongside OpenSprinkler use
-# driver = "sim" and sim = true instead; never "shiftreg" while
-# OpenSprinkler or OSPy is running.
+# For a dry run without switching valves, use driver = "sim" and
+# [inputs.rain] sim = true.
 listen = ":80"
 db     = "/var/lib/sprinkler/sprinkler.db"
 
 [outputs]
-driver = "shiftreg"   # Cutover 2026-11-08 (was "sim" for Shadow)
+driver = "shiftreg"
 chip   = "gpiochip0"
 count  = 8
 
@@ -21,7 +19,7 @@ clock = 4
 oe    = 17
 
 [inputs.rain]
-sim      = false      # real sensor on GPIO 14 since Cutover
+sim      = false
 pin      = 14
 normally = "open"
 

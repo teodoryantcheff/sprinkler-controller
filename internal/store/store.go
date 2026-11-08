@@ -213,20 +213,32 @@ func (s *Store) Settings() (core.Settings, error) {
 
 // SaveSettings writes every field of st.
 func (s *Store) SaveSettings(st core.Settings) error {
-	b, _ := json.Marshal(st)
-	var m map[string]json.RawMessage
-	_ = json.Unmarshal(b, &m)
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := saveSettingsTx(tx, st); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func saveSettingsTx(tx *sql.Tx, st core.Settings) error {
+	b, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
 	for k, v := range m {
 		if _, err := tx.Exec("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, string(v)); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // RawSetting reads a non-typed setting (secrets, internal state).
@@ -703,16 +715,48 @@ func (s *Store) Export() (Backup, error) {
 	return Backup{Version: 1, Exported: time.Now().UTC(), Settings: st, Zones: zs, Programs: ps}, nil
 }
 
-// Restore replaces zones, programs and settings with the backup. Run
-// history is kept.
-func (s *Store) Restore(ctx context.Context, b Backup) error {
+// Validate checks a backup with the same rules as the API's zone, program
+// and settings endpoints. outputs is the driver's output count.
+func (b *Backup) Validate(outputs int) error {
 	if b.Version != 1 {
 		return fmt.Errorf("unsupported backup version %d", b.Version)
 	}
-	for i := range b.Programs {
-		if err := b.Programs[i].Validate(); err != nil {
-			return fmt.Errorf("program %q: %w", b.Programs[i].Name, err)
+	if err := b.Settings.Validate(); err != nil {
+		return fmt.Errorf("settings: %w", err)
+	}
+	zones := map[int64]bool{}
+	for i := range b.Zones {
+		z := &b.Zones[i]
+		if err := z.Validate(outputs); err != nil {
+			return fmt.Errorf("zone %q: %w", z.Name, err)
 		}
+		zones[z.ID] = true
+	}
+	if b.Settings.MasterZoneID != 0 && !zones[b.Settings.MasterZoneID] {
+		return errors.New("settings: master zone does not exist")
+	}
+	for i := range b.Programs {
+		p := &b.Programs[i]
+		if err := p.Validate(); err != nil {
+			return fmt.Errorf("program %q: %w", p.Name, err)
+		}
+		for _, pz := range p.Zones {
+			if !zones[pz.ZoneID] {
+				return fmt.Errorf("program %q: unknown zone %d", p.Name, pz.ZoneID)
+			}
+			if pz.ZoneID == b.Settings.MasterZoneID {
+				return fmt.Errorf("program %q: the master valve cannot be part of a program", p.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// Restore validates the backup, then replaces zones, programs and settings
+// with it in one transaction. Run history is kept.
+func (s *Store) Restore(ctx context.Context, b Backup, outputs int) error {
+	if err := b.Validate(outputs); err != nil {
+		return err
 	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -743,8 +787,8 @@ func (s *Store) Restore(ctx context.Context, b Backup) error {
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
+	if err := saveSettingsTx(tx, b.Settings); err != nil {
 		return err
 	}
-	return s.SaveSettings(b.Settings)
+	return tx.Commit()
 }

@@ -253,7 +253,7 @@ func serve(args []string, log *slog.Logger) (err error) {
 		}
 		return err
 	}
-	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	srv := newServer(handler, nil)
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return fail(err)
@@ -272,7 +272,7 @@ func serve(args []string, log *slog.Logger) (err error) {
 			return fail(fmt.Errorf("tls: %w", err))
 		}
 		handler.SetCA(caPEM)
-		tsrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, TLSConfig: tcfg}
+		tsrv := newServer(handler, tcfg)
 		tln, err := net.Listen("tcp", cfg.TLS.Listen)
 		if err != nil {
 			return fail(err)
@@ -296,6 +296,19 @@ func serve(args []string, log *slog.Logger) (err error) {
 		_ = s.Shutdown(shCtx)
 	}
 	return <-runnerDone
+}
+
+// newServer sets the limits shared by the HTTP and HTTPS servers. There is
+// no ReadTimeout/WriteTimeout: /api/stream is a long-lived response, and
+// request bodies are capped at 1 MiB by the handlers.
+func newServer(h http.Handler, tcfg *tls.Config) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		TLSConfig:         tcfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    64 << 10,
+	}
 }
 
 // tlsConfig loads the configured certificate, or the local CA's.

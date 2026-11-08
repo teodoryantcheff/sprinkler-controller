@@ -224,6 +224,22 @@ func TestMaxMinutesCap(t *testing.T) {
 	}
 }
 
+func TestMaxMinutesLoweredMidRun(t *testing.T) {
+	var zones []core.Zone
+	var settings core.Settings
+	g := newRig(t, func(s *core.Settings, z []core.Zone) { zones, settings = z, *s })
+	id := g.enqueue(Request{ZoneID: 3, Seconds: 600})[0]
+	g.advance(30)
+	g.want("00100000")
+	zones[2].MaxMinutes = 1
+	g.r.Configure(zones, settings)
+	g.advance(31)
+	g.want("00000000")
+	if r := g.st.runs[id]; r.Outcome != core.OutcomeCutMax || r.ActualSeconds != 60 {
+		t.Errorf("%+v", r)
+	}
+}
+
 func TestDailyCap(t *testing.T) {
 	g := newRig(t, func(s *core.Settings, z []core.Zone) { s.DailyCapMinutes = 2 })
 	g.r.SetDayUsage("2026-11-07", map[int64]int{3: 90})
