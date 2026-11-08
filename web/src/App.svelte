@@ -68,7 +68,7 @@
         <p class="muted small">{t('setup_title')}. {t('setup_hint')}</p>
       {/if}
       <label class="field"><span>{t('password')}</span>
-        <input type="password" bind:value={password} autocomplete={session.setupRequired ? 'new-password' : 'current-password'} minlength={session.setupRequired ? 8 : undefined} required />
+        <input type="password" bind:value={password} autocomplete={session.setupRequired ? 'new-password' : 'current-password'} minlength={session.setupRequired ? 7 : undefined} required />
       </label>
       {#if error}<div class="chip bad">{error}</div>{/if}
       <button class="primary big" disabled={busy}>{session.setupRequired ? t('create') : t('login')}</button>

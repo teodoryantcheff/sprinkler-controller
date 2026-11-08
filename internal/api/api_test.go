@@ -73,11 +73,11 @@ func TestAuthFlowAndManualRun(t *testing.T) {
 	if code, _ := call(t, c, "GET", srv.URL+"/api/state", ""); code != 401 {
 		t.Fatalf("state without login: %d", code)
 	}
-	if code, _ := call(t, c, "POST", srv.URL+"/api/setup", `{"password":"short"}`); code != 400 {
-		t.Fatalf("short password accepted: %d", code)
+	if code, _ := call(t, c, "POST", srv.URL+"/api/setup", `{"password":"sixsix"}`); code != 400 {
+		t.Fatalf("6-character password accepted: %d", code)
 	}
-	if code, _ := call(t, c, "POST", srv.URL+"/api/setup", `{"password":"correct horse"}`); code != 200 {
-		t.Fatalf("setup: %d", code)
+	if code, _ := call(t, c, "POST", srv.URL+"/api/setup", `{"password":"seven77"}`); code != 200 {
+		t.Fatalf("7-character password refused: %d", code)
 	}
 	if code, _ := call(t, client(t), "POST", srv.URL+"/api/setup", `{"password":"another one"}`); code != 403 {
 		t.Fatalf("second setup must be refused: %d", code)
@@ -105,7 +105,7 @@ func TestAuthFlowAndManualRun(t *testing.T) {
 	if code, _ := call(t, c2, "POST", srv.URL+"/api/login", `{"password":"nope"}`); code != 401 {
 		t.Fatalf("wrong password: %d", code)
 	}
-	if code, _ := call(t, c2, "POST", srv.URL+"/api/login", `{"password":"correct horse"}`); code != 200 {
+	if code, _ := call(t, c2, "POST", srv.URL+"/api/login", `{"password":"seven77"}`); code != 200 {
 		t.Fatalf("login: %d", code)
 	}
 	if code, _ := call(t, c2, "POST", srv.URL+"/api/programs", `{"name":"P","enabled":true,"day_rule":{"kind":"weekdays","days":["mon"]},"start_rule":{"kind":"fixed","times":["25:00"]},"zones":[]}`); code != 400 {
@@ -125,3 +125,4 @@ func TestPasswordHash(t *testing.T) {
 		t.Fatal("argon2id check")
 	}
 }
+

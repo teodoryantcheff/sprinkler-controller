@@ -224,6 +224,9 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) (any, error) {
 	return map[string]any{"user": u, "logged_in": ok, "setup_required": n == 0, "language": st.Language, "device_name": st.DeviceName}, nil
 }
 
+// minPassword is the shortest accepted password, in characters.
+const minPassword = 7
+
 type creds struct {
 	Name     string `json:"name"`
 	Password string `json:"password"`
@@ -241,8 +244,8 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) (any, error) {
 	if err := decode(r, &c); err != nil {
 		return nil, err
 	}
-	if len(c.Password) < 8 {
-		return nil, bad("password must be at least 8 characters")
+	if len([]rune(c.Password)) < minPassword {
+		return nil, bad("password must be at least %d characters", minPassword)
 	}
 	if c.Name == "" {
 		c.Name = "admin"
@@ -294,8 +297,8 @@ func (s *Server) password(w http.ResponseWriter, r *http.Request) (any, error) {
 	if err != nil || !CheckPassword(u.PasswordHash, req.Current) {
 		return nil, httpError{http.StatusForbidden, "current password is wrong"}
 	}
-	if len(req.New) < 8 {
-		return nil, bad("password must be at least 8 characters")
+	if len([]rune(req.New)) < minPassword {
+		return nil, bad("password must be at least %d characters", minPassword)
 	}
 	h, err := HashPassword(req.New)
 	if err != nil {

@@ -164,7 +164,7 @@
   <h2>{t('change_password')}</h2>
   <form class="card stack" onsubmit={changePw}>
     <label class="field"><span>{t('current_password')}</span><input type="password" bind:value={curPw} autocomplete="current-password" required /></label>
-    <label class="field"><span>{t('new_password')}</span><input type="password" bind:value={newPw} autocomplete="new-password" minlength="8" required /></label>
+    <label class="field"><span>{t('new_password')}</span><input type="password" bind:value={newPw} autocomplete="new-password" minlength="7" required /></label>
     <div><button>{t('change_password')}</button></div>
   </form>
 
