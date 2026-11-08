@@ -61,10 +61,11 @@ A full SD card image backup is at `/home/teo/backups/sprinklerpi-2026-11-07.img.
 
 ## Hardware facts
 
-- Valve board: 74HC595 shift register, BCM GPIO latch 22, data 27, clock 4, output-enable 17 (OE active-low; high = outputs off). 8 outputs; zones 1–5 and 7 in use.
-- Rain sensor: one, on GPIO 14, normally open, with the internal pull-up (reads 1 = dry). Confirmed by the user and by `nvm.dat` (sensor 1 type = rain, option = NO); the logs contain real `rs` events from June/July 2026. In the running 2.1.8 build, GPIO 23 is *button 1*, not sensor 2 (sensor 2 is a 2.1.9 feature). RF TX on 15 is unused.
+- Pin numbering: config and docs use BCM GPIO numbers (= `gpiochip0` line offsets), with the physical header pin in brackets. Never put header pin numbers in the config. Full table in `SPEC.md` under the hardware config.
+- Valve board: 74HC595 shift register, BCM GPIO latch 22 (header pin 15), data 27 (13), clock 4 (7), output-enable 17 (11) (OE active-low; high = outputs off). 8 outputs; zones 1–5 and 7 in use.
+- Rain sensor: one, on GPIO 14 (header pin 8), normally open, with the internal pull-up (reads 1 = dry). Confirmed by the user and by `nvm.dat` (sensor 1 type = rain, option = NO); the logs contain real `rs` events from June/July 2026. In the running 2.1.8 build, GPIO 23 (header pin 16) is *button 1*, not sensor 2 (sensor 2 is a 2.1.9 feature). RF TX on GPIO 15 (header pin 10) is unused.
 - No master valve (option `mas` = 0).
-- OSPy also drives the same shift-register pins (BOARD numbering 7/11/13/15). Its scheduler is disabled, but the service is running (`ospy`, `python run.py` as root) and holds the pins. The new service must refuse to start if another process owns the lines.
+- OSPy also drives the same shift-register pins (BOARD numbering 7/11/13/15 = GPIO 4/17/27/22). Its scheduler is disabled, but the service is running (`ospy`, `python run.py` as root) and holds the pins. The new service must refuse to start if another process owns the lines.
 
 ## OpenSprinkler 2.1.8 data quirks (learned during Phase 0)
 

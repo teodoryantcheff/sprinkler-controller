@@ -30,8 +30,8 @@ The controller is a Pi 1 Model B rev 2 running OpenSprinkler 2.1.8 (built July 2
 | Board | Raspberry Pi 1 Model B rev 2, ARMv6, 512 MB RAM, 32 GB SanDisk SD (2016) |
 | OS | Raspbian 10 (buster), kernel 5.10.103, Python 3.7 |
 | Software | OpenSprinkler unified firmware 2.1.8 binary in `/home/pi/OpenSprinklerGen2`, run as root via `/etc/init.d/OpenSprinkler.sh` |
-| Valve board | 74HC595 shift register: latch GPIO 22, data GPIO 27, clock GPIO 4, output-enable GPIO 17 (BCM numbering) |
-| Sensor pins | Sensor 1 GPIO 14, sensor 2 GPIO 23, RF transmitter GPIO 15 (defined; usage not confirmed) |
+| Valve board | 74HC595 shift register: latch GPIO 22 (header pin 15), data GPIO 27 (pin 13), clock GPIO 4 (pin 7), output-enable GPIO 17 (pin 11) |
+| Sensor pins | Sensor 1 GPIO 14 (header pin 8), sensor 2 GPIO 23 (pin 16), RF transmitter GPIO 15 (pin 10) (defined; usage not confirmed) |
 | Zones in use | 6 of 8 outputs (zones 1–5 and 7, from the run logs) |
 | Programs | 3 programs seen in the logs, runs of 20–35 min, mostly every other day |
 | Weather | Watering level fixed at 100%; location 42.32, 24.04 |
@@ -171,7 +171,7 @@ All outputs go through one `Outputs` interface — `Set(states []bool) error` an
 
 | Driver | For | Behaviour |
 | --- | --- | --- |
-| `shiftreg` | Current OSPi-style board (74HC595 chain) | Clocks all bits out MSB-first, then latches; holds output-enable high (outputs off) until the first valid write. Pins configurable; defaults GPIO 22/27/4/17 |
+| `shiftreg` | Current OSPi-style board (74HC595 chain) | Clocks all bits out MSB-first, then latches; holds output-enable high (outputs off) until the first valid write. Pins configurable; defaults GPIO 22/27/4/17 (header pins 15/13/7/11) |
 | `gpiorelay` | Relay boards wired to GPIO pins | One pin per zone; active-high or active-low per board |
 | `sim` | Development on a PC, tests | Prints state changes and shows them in the UI; never touches hardware |
 
@@ -188,16 +188,28 @@ driver = "shiftreg"   # shiftreg | gpiorelay | sim
 chip   = "gpiochip0"
 count  = 8
 [outputs.shiftreg]
-latch = 22
-data  = 27
-clock = 4
-oe    = 17
+latch = 22   # GPIO22, header pin 15
+data  = 27   # GPIO27, header pin 13
+clock = 4    # GPIO4,  header pin 7
+oe    = 17   # GPIO17, header pin 11
 [inputs.rain]
-pin = 14
+pin = 14     # GPIO14, header pin 8
 normally = "open"
 ```
 
-The driver is the only part that differs between the Pi 1 and modern boards; the GPIO line numbers stay the same on every Pi model.
+**Pin numbering.** Pin values in the config are BCM GPIO numbers, which are also the `gpiochip0` line offsets the driver requests. They are not physical header pin numbers (BOARD numbering, as OSPy uses). Docs write them as "GPIO 22 (header pin 15)".
+
+| Function | BCM GPIO | Header pin |
+| --- | --- | --- |
+| Shift register clock | 4 | 7 |
+| Shift register output enable (active low) | 17 | 11 |
+| Shift register data | 27 | 13 |
+| Shift register latch | 22 | 15 |
+| Rain sensor (sensor 1) | 14 | 8 |
+| RF transmitter (unused) | 15 | 10 |
+| Button 1 in 2.1.8 (unused) | 23 | 16 |
+
+The driver is the only part that differs between the Pi 1 and modern boards; GPIO numbers and header positions are the same on every Pi model. The Pi 1 Model B rev 2's 26-pin header matches the first 26 pins of the later 40-pin header.
 
 ## Weather
 
@@ -298,7 +310,7 @@ Cutover happens outside the watering season or on a dry week, so a mistake costs
 
 - [x] Zone and program names: imported from `nvm.dat`. Zones 1–4 "Ливада Зона 1–4", 5 "Туи", 6 "Домати" (disabled), 7 "Ц. Градинки", 8 "S08" (disabled).
 - [x] Master valve or pump: none.
-- [x] Sensors: one rain sensor on GPIO 14, normally open. In 2.1.8, GPIO 23 is a button, not sensor 2. No flow meter.
+- [x] Sensors: one rain sensor on GPIO 14 (header pin 8), normally open. In 2.1.8, GPIO 23 (pin 16) is a button, not sensor 2. No flow meter.
 - [ ] Stay on the Pi 1 after cutover, or move to a Pi Zero 2 W on a current OS? The software runs on both; the OS on the Pi 1 stays out of support.
 - [ ] Access from outside the house: LAN only, or through a VPN such as Tailscale / WireGuard?
 - [ ] Which adjustment method should be the default once weather lands: OpenSprinkler service (Zimmerman) or ET-based from Open-Meteo?
