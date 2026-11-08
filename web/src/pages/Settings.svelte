@@ -344,6 +344,7 @@
   <div class="card small">
     <div>{t('driver')}: <strong>{info.driver}</strong> · {t('outputs')}: {info.outputs}</div>
     <div class="muted">{t('version')} {info.version} · {info.hostname} · {info.arch} · {info.go}</div>
+    <div><a href="/api/docs" target="_blank" rel="noopener">{t('api_docs')}</a></div>
   </div>
   <p class="small muted">{i18n.lang === 'bg' ? 'Език' : 'Language'}: {i18n.lang}</p>
 {/if}

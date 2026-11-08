@@ -1,6 +1,6 @@
 # Sprinkler controller
 
-A replacement for OpenSprinkler 2.1.8 on `sprinklerpi`: one Go binary with the scheduler, valve driver, HTTP API, embedded web UI and SQLite. See `SPEC.md` for scope and rules, and `AGENTS.md` before touching the live Pi. The HTTP API is documented in `docs/API.md`.
+A replacement for OpenSprinkler 2.1.8 on `sprinklerpi`: one Go binary with the scheduler, valve driver, HTTP API, embedded web UI and SQLite. See `SPEC.md` for scope and rules, and `AGENTS.md` before touching the live Pi. The HTTP API is documented in `docs/API.md`, also served by the app at `/api/docs`.
 
 Status: Phase 0 (import) and Phase 1 (core) are done. **Since 2026-11-08 it runs on `sprinklerpi` in place of OpenSprinkler**, on the real valve driver, at **http://192.168.1.20** and **https://192.168.1.20** (also `sprinklerpi.local`). OpenSprinkler and OSPy are stopped and disabled, not removed (see the rollback below).
 

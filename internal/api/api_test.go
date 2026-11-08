@@ -142,3 +142,21 @@ func TestCADownload(t *testing.T) {
 		t.Errorf("no TLS configured: /ca.crt should be 404, got %d", resp.StatusCode)
 	}
 }
+
+func TestDocs(t *testing.T) {
+	srv, _ := newServer(t)
+	for path, want := range map[string]string{
+		"/api/docs":    `<h2 id="endpoint-index">`,
+		"/api/docs.md": "## Endpoint index",
+	} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || !strings.Contains(string(b), want) {
+			t.Errorf("%s: status %d, missing %q", path, resp.StatusCode, want)
+		}
+	}
+}

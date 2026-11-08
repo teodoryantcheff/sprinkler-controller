@@ -6,6 +6,7 @@ The JSON API the web UI uses. It is not compatible with the OpenSprinkler API. T
 - All bodies are JSON (UTF-8). Every JSON response carries `Cache-Control: no-store`.
 - Times are RFC 3339 in UTC (`2026-11-08T05:30:00Z`). Durations are whole seconds unless the field name says otherwise (`_min`, `_minutes`, `hours`).
 - IDs are integers. `output_index` is 0-based (output 1 is `0`).
+- This page is built into the binary: `GET /api/docs` serves it as HTML and `GET /api/docs.md` as Markdown, both without login.
 
 ## Conventions
 
@@ -85,6 +86,8 @@ curl -b jar -H "$H" -d '{}' http://sprinklerpi/api/stop
 | PUT | `/api/settings` | yes | Change settings |
 | GET | `/api/backup` | yes | Download backup |
 | POST | `/api/restore` | yes | Restore backup |
+| GET | `/api/docs` | open | This reference as HTML |
+| GET | `/api/docs.md` | open | This reference as Markdown |
 | GET | `/ca.crt` | open | Local CA certificate |
 
 Every other path outside `/api/` serves the embedded web UI. Unknown paths get `index.html` so client-side routes work.
