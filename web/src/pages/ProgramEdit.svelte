@@ -4,6 +4,7 @@
   import { t, type Key } from '../lib/i18n.svelte'
   import { WEEKDAYS, dur, when, zoneName, clock } from '../lib/format'
   import { toast, errMsg, go } from '../lib/ui.svelte'
+  import Icon from '../lib/Icon.svelte'
 
   let { id }: { id: string } = $props()
   const isNew = $derived(id === 'new')
@@ -226,7 +227,9 @@
 {/snippet}
 
 <header class="top">
-  <button class="ghost" onclick={() => go('/programs')}>← {t('back')}</button>
+  <button class="icon-btn ghost round" aria-label={t('back')} title={t('back')} onclick={() => go('/programs')}
+    ><Icon name="back" size={26} /></button
+  >
   <h1 class="grow ellipsis">{isNew ? t('new_program') : p.name}</h1>
 </header>
 
@@ -246,7 +249,7 @@
       <label class="check"><input type="checkbox" bind:checked={p.weather_scaled} />{t('weather_scaled')}</label>
     </div>
 
-    <h2>{t('days')}</h2>
+    <h2><Icon name="calendar" />{t('days')}</h2>
     <div class="card stack">
       <div class="seg" role="group">
         {#each dayKinds as k}
@@ -312,7 +315,7 @@
       </div>
     </div>
 
-    <h2>{t('start_times')}</h2>
+    <h2><Icon name="clock" />{t('start_times')}</h2>
     <div class="card stack">
       <div class="seg" role="group">
         {#each startKinds as k}
@@ -329,14 +332,15 @@
                 type="button"
                 class="icon-btn ghost"
                 aria-label={t('delete')}
-                onclick={() => (rows = rows.filter((_, j) => j !== i))}>✕</button
+                title={t('delete')}
+                onclick={() => (rows = rows.filter((_, j) => j !== i))}><Icon name="trash" /></button
               >{/if}
           </div>
         {/each}
         {#if rows.length < 4}
           <div>
             <button type="button" onclick={() => (rows = [...rows, { mode: 'clock', clock: '19:00', offset: 0 }])}
-              >+ {t('add')}</button
+              ><Icon name="plus" />{t('add')}</button
             >
           </div>
         {/if}
@@ -365,7 +369,7 @@
       {/if}
     </div>
 
-    <h2>{t('zone_order')}</h2>
+    <h2><Icon name="droplet" />{t('zone_order')}</h2>
     <div class="card">
       <ul
         class="list"
@@ -374,36 +378,42 @@
         onpointercancel={() => (dragIndex = null)}
       >
         {#each p.zones as pz, i (pz.zone_id)}
-          <li class="row" data-zi={i} class:dragging={dragIndex === i}>
+          <li class="row" style="gap:6px" data-zi={i} class:dragging={dragIndex === i}>
             <span class="drag" onpointerdown={(e) => onPointerDown(i, e)} role="button" tabindex="-1" aria-label="drag"
-              >⠿</span
+              ><Icon name="grip" /></span
             >
-            <span class="grow" style="overflow-wrap:anywhere">{zoneName(cache.zones, pz.zone_id)}</span>
-            <input
-              type="number"
-              min="0.2"
-              max="720"
-              step="any"
-              value={pz.seconds / 60}
-              style="width:4.2em;padding:8px 6px"
-              oninput={(e) => (pz.seconds = Math.round(Number((e.target as HTMLInputElement).value) * 60))}
-              aria-label={t('minutes')}
-            />
-            <span class="small muted">{t('min')}</span>
+            <div class="grow">
+              <div style="overflow-wrap:anywhere;font-weight:600">{zoneName(cache.zones, pz.zone_id)}</div>
+              <div class="row" style="gap:6px;margin-top:4px">
+                <input
+                  type="number"
+                  inputmode="decimal"
+                  min="0.2"
+                  max="720"
+                  step="any"
+                  value={pz.seconds / 60}
+                  style="width:5em"
+                  oninput={(e) => (pz.seconds = Math.round(Number((e.target as HTMLInputElement).value) * 60))}
+                  aria-label={t('minutes')}
+                />
+                <span class="small muted">{t('min')}</span>
+              </div>
+            </div>
             <button
               type="button"
               class="icon-btn ghost"
-              style="padding:0 6px;min-width:34px"
               aria-label="up"
+              title="↑"
               onclick={() => move(i, -1)}
-              disabled={i === 0}>↑</button
+              disabled={i === 0}><Icon name="up" /></button
             >
             <button
               type="button"
               class="icon-btn ghost"
-              style="padding:0 6px;min-width:34px"
+              style="color:var(--danger)"
               aria-label={t('delete')}
-              onclick={() => (p.zones = p.zones.filter((_, j) => j !== i))}>✕</button
+              title={t('delete')}
+              onclick={() => (p.zones = p.zones.filter((_, j) => j !== i))}><Icon name="trash" /></button
             >
           </li>
         {/each}
@@ -419,12 +429,18 @@
                 >{z.output_index + 1}. {z.name}{z.enabled ? '' : ` (${t('disabled')})`}</option
               >{/each}
           </select>
-          <button type="button" onclick={addZone}>+ {t('add_zone')}</button>
+          <button
+            type="button"
+            class="icon-btn primary"
+            aria-label={t('add_zone')}
+            title={t('add_zone')}
+            onclick={addZone}><Icon name="plus" /></button
+          >
         </div>
       {/if}
     </div>
 
-    <h2>{t('preview')}</h2>
+    <h2><Icon name="list" />{t('preview')}</h2>
     <div class="card">
       {#if previewErr}
         <span class="chip bad">{previewErr}</span>
@@ -453,11 +469,17 @@
     </div>
 
     {#if error}<div class="banner bad">{error}</div>{/if}
-    <div class="row">
-      {#if !isNew}<button type="button" class="ghost" onclick={remove}>{t('delete')}</button>{/if}
-      <span class="grow"></span>
-      <button type="button" onclick={() => go('/programs')}>{t('cancel')}</button>
-      <button class="primary" disabled={saving}>{t('save')}</button>
+    <div class="row savebar">
+      {#if !isNew}<button
+          type="button"
+          class="icon-btn ghost"
+          style="color:var(--danger)"
+          aria-label={t('delete')}
+          title={t('delete')}
+          onclick={remove}><Icon name="trash" /></button
+        >{/if}
+      <button type="button" class="grow" onclick={() => go('/programs')}>{t('cancel')}</button>
+      <button class="primary grow" disabled={saving}><Icon name="check" />{t('save')}</button>
     </div>
   </form>
 {/if}

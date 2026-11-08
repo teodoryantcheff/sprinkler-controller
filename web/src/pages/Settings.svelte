@@ -4,6 +4,7 @@
   import { t, i18n, setLang } from '../lib/i18n.svelte'
   import { toast, errMsg, theme, applyTheme, type Theme } from '../lib/ui.svelte'
   import { install, promptInstall } from '../lib/install.svelte'
+  import Icon from '../lib/Icon.svelte'
 
   let s = $state<Settings | null>(null)
   let info = $state<Record<string, string | number>>({})
@@ -98,14 +99,14 @@
 
 <header class="top">
   <h1>{t('settings')}</h1>
-  <button class="ghost" onclick={logout}>{t('logout')}</button>
+  <button class="ghost" onclick={logout}><Icon name="logout" />{t('logout')}</button>
 </header>
 
 {#if !s}
   <p class="muted">{t('loading')}</p>
 {:else}
   <form onsubmit={save} class="stack">
-    <h2>{t('device')}</h2>
+    <h2><Icon name="chip" />{t('device')}</h2>
     <div class="card stack">
       <label class="field"><span>{t('device_name')}</span><input bind:value={s.device_name} maxlength="40" /></label>
       <div class="grid2">
@@ -127,7 +128,7 @@
       <label class="check"><input type="checkbox" bind:checked={s.controller_on} />{t('controller_on')}</label>
     </div>
 
-    <h2>{t('location')}</h2>
+    <h2><Icon name="pin" />{t('location')}</h2>
     <div class="card stack">
       <div class="grid2">
         <label class="field"
@@ -151,7 +152,7 @@
           /></label
         >
       </div>
-      <div><button type="button" onclick={locate}>{t('use_my_location')}</button></div>
+      <div><button type="button" onclick={locate}><Icon name="locate" />{t('use_my_location')}</button></div>
       <label class="field"
         ><span>{t('timezone')}</span>
         <select bind:value={s.timezone}
@@ -160,7 +161,7 @@
       </label>
     </div>
 
-    <h2>{t('watering')}</h2>
+    <h2><Icon name="droplet" />{t('watering')}</h2>
     <div class="card stack">
       <div class="grid2">
         <label class="field"
@@ -213,7 +214,7 @@
       {/if}
     </div>
 
-    <h2>{t('sensor_settings')}</h2>
+    <h2><Icon name="sensor" />{t('sensor_settings')}</h2>
     <div class="card stack">
       <label class="check"><input type="checkbox" bind:checked={s.sensor.enabled} />{t('sensor_enabled')}</label>
       {#if s.sensor.enabled}
@@ -253,7 +254,7 @@
       {/if}
     </div>
 
-    <h2>{t('safety')}</h2>
+    <h2><Icon name="shield" />{t('safety')}</h2>
     <div class="card stack">
       <div class="grid2">
         <label class="field"
@@ -277,15 +278,17 @@
       </div>
     </div>
 
-    <h2>{t('access')}</h2>
+    <h2><Icon name="globe" />{t('access')}</h2>
     <div class="card stack">
       <label class="check"><input type="checkbox" bind:checked={s.lan_no_login} />{t('lan_no_login')}</label>
     </div>
 
-    <div class="row"><span class="grow"></span><button class="primary" disabled={saving}>{t('save')}</button></div>
+    <div class="row savebar">
+      <button class="primary grow" disabled={saving}><Icon name="check" />{t('save')}</button>
+    </div>
   </form>
 
-  <h2>{t('app')}</h2>
+  <h2><Icon name="download" />{t('app')}</h2>
   <div class="card stack small">
     {#if install.installed}
       <span class="chip ok">{t('installed')}</span>
@@ -310,7 +313,7 @@
     {/if}
   </div>
 
-  <h2>{t('change_password')}</h2>
+  <h2><Icon name="key" />{t('change_password')}</h2>
   <form class="card stack" onsubmit={changePw}>
     <label class="field"
       ><span>{t('current_password')}</span><input
@@ -332,15 +335,20 @@
     <div><button>{t('change_password')}</button></div>
   </form>
 
-  <h2>{t('backup')}</h2>
+  <h2><Icon name="download" />{t('backup')}</h2>
   <div class="card row wrap-row">
-    <a class="btn" href="/api/backup" download>{t('download_backup')}</a>
-    <label class="btn"
-      >{t('restore')}<input type="file" accept="application/json,.json" onchange={restore} hidden /></label
+    <a class="btn grow" href="/api/backup" download><Icon name="download" />{t('download_backup')}</a>
+    <label class="btn grow"
+      ><Icon name="upload" />{t('restore')}<input
+        type="file"
+        accept="application/json,.json"
+        onchange={restore}
+        hidden
+      /></label
     >
   </div>
 
-  <h2>{t('hardware')}</h2>
+  <h2><Icon name="chip" />{t('hardware')}</h2>
   <div class="card small">
     <div>{t('driver')}: <strong>{info.driver}</strong> · {t('outputs')}: {info.outputs}</div>
     <div class="muted">{t('version')} {info.version} · {info.hostname} · {info.arch} · {info.go}</div>
