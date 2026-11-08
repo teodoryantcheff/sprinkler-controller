@@ -24,9 +24,10 @@ armv6:
 	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/sprinkler-armv6 ./cmd/sprinkler
 
 # Update the Pi (see deploy/update.sh): refuses while watering, asks
-# before restarting. deploy-check only copies to /tmp and checks.
+# before restarting (YES=1 skips the prompt, e.g. without a terminal).
+# deploy-check only copies to /tmp and checks.
 deploy: web armv6
-	deploy/update.sh
+	deploy/update.sh $(if $(YES),-y)
 
 deploy-check: web armv6
 	deploy/update.sh -n

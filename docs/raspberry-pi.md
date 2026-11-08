@@ -146,7 +146,7 @@ make deploy         # the same checks, then install and restart after a y/N prom
 2. It runs the new binary there (`version`), which catches a wrong architecture before anything is replaced.
 3. It runs `sprinkler busy -config /etc/sprinkler/sprinkler.toml` with the new binary, as the `sprinkler` user. This reads the live database read-only, with no migrations. If any run is watering or queued, the script stops: a restart closes every valve.
 4. It shows `diff -u` for the config and unit when they differ from what is installed.
-5. After the prompt (skip it with `deploy/update.sh -y`), it installs over the current binary, config and unit, with no `.prev` copies. It runs `daemon-reload` if the unit changed and restarts `sprinkler`.
+5. After the prompt (skip it with `make deploy YES=1`, needed where there is no terminal), it installs over the current binary, config and unit, with no `.prev` copies. It runs `daemon-reload` if the unit changed and restarts `sprinkler`.
 6. It waits for the journal line `msg=listening ... version=<new>`. If that line doesn't appear, it prints the log and fails. The valves stay off while the service is down.
 
 Use another host with `HOST=pi@sprinklerpi.local make deploy`. To roll back a bad update, check out the previous commit and run `make deploy` again.

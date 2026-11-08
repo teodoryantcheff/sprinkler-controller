@@ -46,6 +46,7 @@ want=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 ctl=$(mktemp -d)
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8 -o ControlMaster=auto -o "ControlPath=$ctl/%C" -o ControlPersist=120)
 cleanup() {
+	ssh "${SSH_OPTS[@]}" "$HOST" "rm -rf $TMP" 2>/dev/null || true
 	ssh "${SSH_OPTS[@]}" -O exit "$HOST" 2>/dev/null || true
 	rm -rf "$ctl"
 }
@@ -97,12 +98,12 @@ fi
 
 if [ $dry = 1 ]; then
 	say "Dry run: nothing installed"
-	run "rm -rf $TMP"
 	exit 0
 fi
 if [ $yes = 0 ]; then
+	[ -t 0 ] || die "no terminal for the y/N prompt: run 'make deploy YES=1' (or deploy/update.sh -y)"
 	read -r -p "Install $got and restart sprinkler (all valves close)? [y/N] " a
-	[ "$a" = y ] || [ "$a" = Y ] || { run "rm -rf $TMP"; die "aborted"; }
+	[ "$a" = y ] || [ "$a" = Y ] || die "aborted"
 fi
 
 say "Installing and restarting"
@@ -111,7 +112,6 @@ run "sudo install -m 0755 $TMP/sprinkler /usr/local/bin/sprinkler"
 [ $changed_conf = 1 ] && run "sudo install -m 0644 $TMP/sprinkler.toml $CONF"
 [ $changed_unit = 1 ] && run "sudo install -m 0644 $TMP/sprinkler.service $UNIT && sudo systemctl daemon-reload"
 run "sudo systemctl restart sprinkler"
-run "rm -rf $TMP"
 
 say "Waiting for the service (Pi 1: may take ~20 s)"
 for _ in $(seq 1 30); do
