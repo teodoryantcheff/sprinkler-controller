@@ -41,20 +41,30 @@ case $(file -b "$BIN" 2>/dev/null) in
 esac
 want=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
 
+# One shared SSH connection for every step: a single handshake (slow on
+# the Pi 1) and its warnings shown once, not per command.
+ctl=$(mktemp -d)
+SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=8 -o ControlMaster=auto -o "ControlPath=$ctl/%C" -o ControlPersist=120)
+cleanup() {
+	ssh "${SSH_OPTS[@]}" -O exit "$HOST" 2>/dev/null || true
+	rm -rf "$ctl"
+}
+trap cleanup EXIT
+
 say "Connecting to $HOST"
-if ! out=$(ssh -o BatchMode=yes -o ConnectTimeout=8 "$HOST" true 2>&1); then
+if ! out=$(ssh "${SSH_OPTS[@]}" "$HOST" true 2>&1); then
 	case $out in
 	*"Permission denied"*) die "ssh key not loaded: run 'ssh-add' and retry" ;;
 	*) die "ssh failed: $out" ;;
 	esac
 fi
-run() { ssh -o BatchMode=yes "$HOST" "$@"; }
+run() { ssh "${SSH_OPTS[@]}" "$HOST" "$@"; }
 
 say "Copying $BIN ($(du -h "$BIN" | cut -f1)), config and unit"
 run "mkdir -p $TMP"
-scp -q -o BatchMode=yes "$BIN" "$HOST:$TMP/sprinkler"
-scp -q -o BatchMode=yes "$CONF_SRC" "$HOST:$TMP/sprinkler.toml"
-scp -q -o BatchMode=yes "$UNIT_SRC" "$HOST:$TMP/sprinkler.service"
+scp -q "${SSH_OPTS[@]}" "$BIN" "$HOST:$TMP/sprinkler"
+scp -q "${SSH_OPTS[@]}" "$CONF_SRC" "$HOST:$TMP/sprinkler.toml"
+scp -q "${SSH_OPTS[@]}" "$UNIT_SRC" "$HOST:$TMP/sprinkler.service"
 run "chmod 0755 $TMP/sprinkler"
 
 say "Running the new binary on the Pi"
