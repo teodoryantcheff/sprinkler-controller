@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n.svelte'
   import { dur } from '../lib/format'
   import { toast, errMsg } from '../lib/ui.svelte'
+  import Icon from '../lib/Icon.svelte'
 
   let editing = $state<Zone | null>(null)
   let dialog: HTMLDialogElement
@@ -101,7 +102,9 @@
   <h1>{t('zones')}</h1>
   {#if maxOpen}<span class="chip {openCount ? 'water' : ''} small">{t('open_of', { n: openCount, max: maxOpen })}</span
     >{/if}
-  {#if cache.zones.length < outputs}<button onclick={() => open()}>+ {t('new_zone')}</button>{/if}
+  {#if cache.zones.length < outputs}<button class="primary" onclick={() => open()}
+      ><Icon name="plus" />{t('new_zone')}</button
+    >{/if}
 </header>
 
 <div class="card">
@@ -111,9 +114,7 @@
       {@const rem = r ? left(r) : 0}
       <li>
         <div class="row">
-          <span class="chip {r?.state === 'running' ? 'water' : ''} tnum" style="min-width:2.4em;justify-content:center"
-            >{z.output_index + 1}</span
-          >
+          <span class="zone-num" class:on={r?.state === 'running'}>{z.output_index + 1}</span>
           <button
             class="ghost grow"
             style="justify-content:flex-start;text-align:left;padding:4px"
@@ -130,6 +131,7 @@
                 {t('min')}
               </span>
             </span>
+            <Icon name="edit" size={20} />
           </button>
           {#if r}
             {#if r.state === 'running'}
@@ -137,9 +139,18 @@
             {:else}
               <span class="chip warn small">{t('waiting_slot')}</span>
             {/if}
-            <button class="danger small" onclick={() => stop(r)}>{t('stop')}</button>
+            <button class="icon-btn round danger" onclick={() => stop(r)} aria-label={t('stop')} title={t('stop')}
+              ><Icon name="stop" /></button
+            >
           {:else}
-            <button class="small" onclick={() => test(z)} disabled={!z.enabled}>{t('test_1min')}</button>
+            <button
+              class="icon-btn round"
+              style="color:var(--water)"
+              onclick={() => test(z)}
+              disabled={!z.enabled}
+              aria-label={t('test_1min')}
+              title={t('test_1min')}><Icon name="play" /></button
+            >
           {/if}
         </div>
         {#if r && r.state === 'running'}
@@ -153,7 +164,12 @@
 <dialog bind:this={dialog}>
   {#if editing}
     <form class="stack" onsubmit={save}>
-      <h3>{editing.id ? editing.name : t('new_zone')}</h3>
+      <div class="row spread">
+        <h3 class="ellipsis">{editing.id ? editing.name : t('new_zone')}</h3>
+        <button type="button" class="icon-btn ghost" aria-label={t('cancel')} onclick={() => dialog.close()}
+          ><Icon name="x" /></button
+        >
+      </div>
       <label class="field"><span>{t('name')}</span><input bind:value={editing.name} required maxlength="40" /></label>
       <div class="grid2">
         <label class="field"
@@ -186,7 +202,7 @@
       <label class="check"><input type="checkbox" bind:checked={editing.uses_master} />{t('uses_master')}</label>
       <div class="row">
         <button type="button" class="grow" onclick={() => dialog.close()}>{t('cancel')}</button>
-        <button class="primary grow">{t('save')}</button>
+        <button class="primary grow"><Icon name="check" />{t('save')}</button>
       </div>
     </form>
   {/if}
