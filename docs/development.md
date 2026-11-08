@@ -61,8 +61,11 @@ Both send a normal shutdown signal. The log ends with `shutting down: all valves
 sprinkler serve  -config deploy/dev.toml       # or -listen / -db overrides
 sprinkler import -from DIR -db FILE [-force] [-dry-run] [-tz Europe/Sofia]
 sprinkler passwd [-config FILE | -db FILE] [-user admin] [-keep-sessions]
+sprinkler busy   [-config FILE | -db FILE]     # read-only; exit 3 while watering or queued
 sprinkler version
 ```
+
+`make deploy` and `make deploy-check` update the Pi; see [raspberry-pi.md](raspberry-pi.md#updating).
 
 ### Forgot the password
 

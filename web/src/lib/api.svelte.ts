@@ -95,6 +95,7 @@ export interface Status {
   rain_delay_until: string | null
   sensor: { enabled: boolean; wet: boolean; raw: boolean; error?: string; sim: boolean; kind: string }
   controller_on: boolean
+  clock_waiting: boolean
   timezone: string
   sun?: { sunrise: string; sunset: string }
 }
@@ -145,8 +146,10 @@ export class ApiError extends Error {
 
 export async function api<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method, headers: {}, credentials: 'same-origin' }
-  if (body !== undefined) {
-    init.body = JSON.stringify(body)
+  if (body !== undefined) init.body = JSON.stringify(body)
+  // The server refuses every write without a JSON content type, even one
+  // with no body (e.g. DELETE).
+  if (method !== 'GET' && method !== 'HEAD') {
     ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
   }
   const r = await fetch(path, init)

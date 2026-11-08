@@ -4,7 +4,7 @@ GO ?= go
 GOBIN := $(shell $(GO) env GOPATH)/bin
 export PATH := $(GOBIN):$(PATH)
 
-.PHONY: all web build cross test vet fmt lint vuln tools hooks check run import clean
+.PHONY: all web build cross armv6 deploy deploy-check test vet fmt lint vuln tools hooks check run import clean
 
 all: web build
 
@@ -19,6 +19,18 @@ cross:
 	GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/sprinkler-armv7 ./cmd/sprinkler
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/sprinkler-arm64 ./cmd/sprinkler
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/sprinkler-amd64 ./cmd/sprinkler
+
+armv6:
+	GOOS=linux GOARCH=arm GOARM=6 CGO_ENABLED=0 $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o dist/sprinkler-armv6 ./cmd/sprinkler
+
+# Update the Pi (see deploy/update.sh): refuses while watering, asks
+# before restarting (YES=1 skips the prompt, e.g. without a terminal).
+# deploy-check only copies to /tmp and checks.
+deploy: web armv6
+	deploy/update.sh $(if $(YES),-y)
+
+deploy-check: web armv6
+	deploy/update.sh -n
 
 vet:
 	$(GO) vet ./...

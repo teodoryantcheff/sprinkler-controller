@@ -138,6 +138,8 @@ Eight SQLite tables hold all state; schema changes ship as numbered migrations i
 | `settings` | key, value (JSON) | Location, time zone, master zone, delays, rain delay until, active providers |
 | `users` | id, name, password_hash (argon2id), created | One admin by default; sessions in signed cookies |
 
+**Retention:** finished `runs` and `events` older than 6 months are deleted once a day (only after the clock has synced). Open runs are never pruned. This includes the imported OpenSprinkler history: the original logs stay in `~/opensprinkler-2026-11-08.tgz` and `/home/pi/OpenSprinklerGen2/logs/`.
+
 **Rule shapes**
 
 ```
@@ -264,6 +266,7 @@ A valve is open only while a healthy controller is deliberately running that zon
 | Hang | systemd `WatchdogSec=30`: the runner pings only while its loop is alive; a missed ping kills and restarts the service. Optional Pi hardware watchdog (`/dev/watchdog`) reboots the board if the OS hangs |
 | Long run | Hard cap per zone (`max_minutes`, default 120) and a global cap of 4 h per day per zone |
 | Too many open | Configurable max zones open at once (default 2 + master) |
+| Clock not synced at boot | The Pi has no RTC. Scheduled programs wait until NTP has set the clock once (kernel `adjtimex` state); starts missed meanwhile are skipped, not run late; manual runs still work. A Home banner and `clock_unsynced`/`clock_synced` events show it. Later NTP outages don't hold programs. `[clock] wait_sync = false` turns it off |
 | Clock jump | NTP or manual time change by > 5 min re-plans the day; runs are never started twice for the same planned start |
 | GPIO write fails | Retry once, then all-off, log `error`, show a red banner |
 | Outputs ownership | Exclusive lock on the GPIO lines; the service refuses to start if another process holds them (catches OSPy or old OpenSprinkler still running) |

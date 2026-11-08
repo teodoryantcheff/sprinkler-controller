@@ -2,7 +2,33 @@
 
 This runbook parks OpenSprinkler and OSPy without deleting anything, and runs this controller on the real valves in their place. You can roll back in a minute. Do it on a dry week or out of season. Every command on the Pi is yours to run, or an agent's only with your explicit go-ahead for that step (see [`AGENTS.md`](../AGENTS.md)).
 
-On 2026-11-08 this was carried out at the user's request without the 14-day shadow run. The service was installed directly with the real-valve config from step 4, then the old controllers were stashed (step 3). The zone tests in step 4 and a test of the rollback are still to do.
+On 2026-11-08 this was carried out at the user's request without the 14-day shadow run. The service was installed directly with the real-valve config from step 4, then the old controllers were stashed (step 3). The zone tests in step 4 and the rollback test were done on 2026-11-09. For later updates, see [Updating](#updating).
+
+## Pin header
+
+What is wired to the Pi's GPIO header. Pin numbers in brackets are physical header pins; names are BCM GPIO numbers, which are what `sprinkler.toml` uses. Pins 1-26 are the same on the Pi 1's 26-pin header and on 40-pin boards. Pin 1 has the square solder pad.
+
+```
+                             +-----------+
+                       3V3   |  1     2  |  5V
+                     GPIO2   |  3     4  |  5V
+                     GPIO3   |  5     6  |  GND
+  74HC595 clock ---- GPIO4   |  7     8  |  GPIO14 ---- rain sensor (other wire to GND)
+                       GND   |  9    10  |  GPIO15      RF transmitter, unused
+  74HC595 OE ------- GPIO17  | 11    12  |  GPIO18
+  74HC595 data ----- GPIO27  | 13    14  |  GND
+  74HC595 latch ---- GPIO22  | 15    16  |  GPIO23      OpenSprinkler button 1, unused
+                       3V3   | 17    18  |  GPIO24
+                    GPIO10   | 19    20  |  GND
+                     GPIO9   | 21    22  |  GPIO25
+                    GPIO11   | 23    24  |  GPIO8
+                       GND   | 25    26  |  GPIO7
+                             +-----------+
+```
+
+- **Valves:** the 74HC595 shift register drives 8 outputs (zones 1-5 and 7 in use). OE is active low: while GPIO17 is high, every output is off whatever the register holds. The driver keeps it high until the first all-off write.
+- **Rain sensor:** normally open, between GPIO14 and GND, with the internal pull-up. It reads 1 when dry and 0 when the switch closes. GPIO14 is also the UART TX pin, so the serial console must stay off.
+- **No master valve** and no flow sensor.
 
 ## 0. Before you start
 
@@ -104,6 +130,26 @@ The service starts with every valve off. Then, in the UI at http://192.168.1.20:
 The gate to finish the Cutover phase is one week of correct watering, and the rollback below tested once.
 
 The installed config (`deploy/sprinklerpi.toml`) serves HTTP on port 80, as OpenSprinkler did, and HTTPS on 443 (`[tls] listen`). The unit grants `CAP_NET_BIND_SERVICE`, so the service binds those ports without running as root.
+
+## Updating
+
+From the laptop, with the SSH key loaded (`ssh-add`):
+
+```sh
+make deploy-check   # build the UI and armv6 binary, copy to /tmp on the Pi, check; installs nothing
+make deploy         # the same checks, then install and restart after a y/N prompt
+```
+
+`deploy/update.sh` does this:
+
+1. It copies `dist/sprinkler-armv6`, `deploy/sprinklerpi.toml` and `deploy/sprinkler.service` to `/tmp/sprinkler-update` on the Pi.
+2. It runs the new binary there (`version`), which catches a wrong architecture before anything is replaced.
+3. It runs `sprinkler busy -config /etc/sprinkler/sprinkler.toml` with the new binary, as the `sprinkler` user. This reads the live database read-only, with no migrations. If any run is watering or queued, the script stops: a restart closes every valve.
+4. It shows `diff -u` for the config and unit when they differ from what is installed.
+5. After the prompt (skip it with `make deploy YES=1`, needed where there is no terminal), it installs over the current binary, config and unit, with no `.prev` copies. It runs `daemon-reload` if the unit changed and restarts `sprinkler`.
+6. It waits for the journal line `msg=listening ... version=<new>`. If that line doesn't appear, it prints the log and fails. The valves stay off while the service is down.
+
+Use another host with `HOST=pi@sprinklerpi.local make deploy`. To roll back a bad update, check out the previous commit and run `make deploy` again.
 
 ## Rollback to OpenSprinkler
 

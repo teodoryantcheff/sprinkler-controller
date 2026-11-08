@@ -3,6 +3,7 @@
 //
 //	sprinkler serve  -config sprinkler.toml
 //	sprinkler import -from ./os-copy -db sprinkler.db [-force]
+//	sprinkler busy   -config sprinkler.toml   (exit 3 while watering)
 package main
 
 import (
@@ -26,6 +27,7 @@ import (
 	"sprinkler/internal/importos"
 	"sprinkler/internal/runner"
 	"sprinkler/internal/store"
+	"sprinkler/internal/sysclock"
 	"sprinkler/internal/tlscert"
 
 	"github.com/BurntSushi/toml"
@@ -56,6 +58,11 @@ type Config struct {
 			Sim      bool   `toml:"sim"`
 		} `toml:"rain"`
 	} `toml:"inputs"`
+	Clock struct {
+		// WaitSync holds scheduled programs until NTP has set the clock
+		// once (default true; the Pi has no hardware clock).
+		WaitSync bool `toml:"wait_sync"`
+	} `toml:"clock"`
 	TLS struct {
 		Listen string   `toml:"listen"` // e.g. ":443"; empty = no HTTPS
 		Hosts  []string `toml:"hosts"`  // names/IPs for the certificate; default: hostname(.local) + current IPs
@@ -75,7 +82,25 @@ func defaultConfig() Config {
 	c.Outputs.ShiftReg.Latch, c.Outputs.ShiftReg.Data, c.Outputs.ShiftReg.Clock, c.Outputs.ShiftReg.OE = 22, 27, 4, 17
 	c.Inputs.Rain.Pin = -1
 	c.Inputs.Rain.Normally = "open"
+	c.Clock.WaitSync = true
 	return c
+}
+
+// loadConfig reads path over the defaults ("" = defaults only). Unknown
+// keys are logged: a typo must not silently fall back to a default.
+func loadConfig(path string, log *slog.Logger) (Config, error) {
+	cfg := defaultConfig()
+	if path == "" {
+		return cfg, nil
+	}
+	md, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
+		return cfg, fmt.Errorf("config: %w", err)
+	}
+	for _, k := range md.Undecoded() {
+		log.Warn("config: unknown key, ignored", "file", path, "key", k.String())
+	}
+	return cfg, nil
 }
 
 func main() {
@@ -87,11 +112,15 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "serve":
-		err = serve(os.Args[2:], log)
+		err = serve(context.Background(), os.Args[2:], log)
 	case "import":
 		err = importCmd(os.Args[2:], log)
 	case "passwd":
 		err = passwdCmd(os.Args[2:])
+	case "busy":
+		if err = busyCmd(os.Args[2:], os.Stdout); errors.Is(err, errBusy) {
+			os.Exit(3)
+		}
 	case "version":
 		fmt.Println(version)
 	default:
@@ -109,6 +138,7 @@ func usage() {
   sprinkler serve  [-config sprinkler.toml] [-listen :8080] [-db sprinkler.db]
   sprinkler import -from DIR [-db sprinkler.db] [-tz Europe/Sofia] [-force] [-dry-run]
   sprinkler passwd [-config sprinkler.toml | -db sprinkler.db] [-user admin] [-keep-sessions]
+  sprinkler busy   [-config sprinkler.toml | -db sprinkler.db]   exit 3 if watering or queued
   sprinkler version
 `)
 }
@@ -158,18 +188,16 @@ func openOutputs(c Config, log *slog.Logger) (hw.Outputs, error) {
 	return nil, fmt.Errorf("unknown output driver %q", c.Outputs.Driver)
 }
 
-func serve(args []string, log *slog.Logger) (err error) {
+func serve(parent context.Context, args []string, log *slog.Logger) (err error) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	cfgPath := fs.String("config", "", "TOML config (hardware, port)")
 	listen := fs.String("listen", "", "override listen address")
 	dbPath := fs.String("db", "", "override database file")
 	fs.Parse(args)
 
-	cfg := defaultConfig()
-	if *cfgPath != "" {
-		if _, err := toml.DecodeFile(*cfgPath, &cfg); err != nil {
-			return fmt.Errorf("config: %w", err)
-		}
+	cfg, err := loadConfig(*cfgPath, log)
+	if err != nil {
+		return err
 	}
 	if *listen != "" {
 		cfg.Listen = *listen
@@ -221,6 +249,9 @@ func serve(args []string, log *slog.Logger) (err error) {
 		return err
 	}
 	a.Version = version
+	if cfg.Clock.WaitSync {
+		a.ClockSynced = sysclock.Synced
+	}
 	switch {
 	case cfg.Inputs.Rain.Sim || (cfg.Outputs.Driver == "sim" && cfg.Inputs.Rain.Pin < 0):
 		a.SimSensor = &hw.SimInput{}
@@ -236,7 +267,7 @@ func serve(args []string, log *slog.Logger) (err error) {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	r.Alive = watchdog(log)

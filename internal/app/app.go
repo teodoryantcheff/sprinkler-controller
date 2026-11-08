@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sprinkler/internal/core"
@@ -29,6 +30,12 @@ type App struct {
 	Log       *slog.Logger
 	Started   time.Time
 	Version   string
+	// ClockSynced reports whether the system clock is set from NTP; nil
+	// means always. Scheduled starts wait for the first sync.
+	ClockSynced func() bool
+
+	clockOK      atomic.Bool
+	clockWaiting atomic.Bool
 
 	mu       sync.RWMutex
 	settings core.Settings
@@ -37,6 +44,7 @@ type App struct {
 	loc      *time.Location
 
 	lastPlan  time.Time
+	lastPrune time.Time
 	sensorRaw bool
 	rawSince  time.Time
 	sensorWet bool
@@ -147,8 +155,40 @@ func (a *App) Conditions(t time.Time) schedule.Conditions {
 	}
 }
 
+// clockReady reports whether scheduled starts may be planned. Until the
+// clock has synced once, the time may be fake-hwclock's stale guess, so
+// programs wait (and their missed starts are skipped, not run late).
+// After the first sync the clock is trusted even if NTP drops out later.
+func (a *App) clockReady(now time.Time) bool {
+	if a.clockOK.Load() {
+		return true
+	}
+	if a.ClockSynced == nil || a.ClockSynced() {
+		a.clockOK.Store(true)
+		if a.clockWaiting.Swap(false) {
+			a.Log.Info("clock synced, scheduling programs")
+			_ = a.Store.AddEvent(now, "clock_synced", nil)
+			a.Notify()
+		}
+		return true
+	}
+	if !a.clockWaiting.Swap(true) {
+		a.Log.Warn("clock not synced yet, programs wait")
+		_ = a.Store.AddEvent(now, "clock_unsynced", nil)
+		a.Notify()
+	}
+	return false
+}
+
+// ClockWaiting reports whether scheduled programs are held until the
+// clock syncs.
+func (a *App) ClockWaiting() bool { return a.clockWaiting.Load() }
+
 // PlanTick queues program starts that fell due since the last call.
 func (a *App) PlanTick(now time.Time) {
+	if !a.clockReady(now) {
+		return // lastPlan stays zero: planning starts fresh after sync
+	}
 	settings, zones, programs, loc := a.Snapshot()
 	from := a.lastPlan
 	switch {
@@ -335,6 +375,26 @@ func (a *App) SetRainDelay(hours float64) error {
 	return nil
 }
 
+// Retention is how long finished runs and events are kept.
+const Retention = 6 // months
+
+// PruneTick drops history older than Retention, at most once a day and
+// only with a trusted clock (a clock far in the future would wipe it).
+func (a *App) PruneTick(now time.Time) {
+	if !a.clockOK.Load() || (!a.lastPrune.IsZero() && now.Sub(a.lastPrune) < 24*time.Hour) {
+		return
+	}
+	a.lastPrune = now
+	runs, events, err := a.Store.Prune(now.AddDate(0, -Retention, 0))
+	if err != nil {
+		a.Log.Error("prune history", "err", err)
+		return
+	}
+	if runs+events > 0 {
+		a.Log.Info("pruned old history", "runs", runs, "events", events)
+	}
+}
+
 // Loop runs the planner and sensor until ctx is done.
 func (a *App) Loop(ctx context.Context) {
 	t := time.NewTicker(time.Second)
@@ -347,6 +407,7 @@ func (a *App) Loop(ctx context.Context) {
 			now := a.Clock()
 			a.SensorTick(now)
 			a.PlanTick(now)
+			a.PruneTick(now)
 		}
 	}
 }
