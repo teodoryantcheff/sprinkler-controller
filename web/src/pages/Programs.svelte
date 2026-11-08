@@ -5,20 +5,27 @@
   import { programSummary } from '../lib/format'
   import { toast, errMsg, go } from '../lib/ui.svelte'
 
-  onMount(() => { loadPrograms(); loadZones() })
+  onMount(() => {
+    loadPrograms()
+    loadZones()
+  })
 
   async function toggle(p: Program) {
     try {
       await api('PUT', `/api/programs/${p.id}`, { ...p, enabled: !p.enabled })
       await loadPrograms()
-    } catch (e) { toast(errMsg(e), true) }
+    } catch (e) {
+      toast(errMsg(e), true)
+    }
   }
 
   async function runNow(p: Program) {
     try {
       await api('POST', `/api/programs/${p.id}/run`, {})
       toast(`${p.name}: ${t('run_now')}`)
-    } catch (e) { toast(errMsg(e), true) }
+    } catch (e) {
+      toast(errMsg(e), true)
+    }
   }
 </script>
 

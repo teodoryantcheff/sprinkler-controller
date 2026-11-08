@@ -9,7 +9,9 @@ let deferred: PromptEvent | null = null
 const ua = navigator.userAgent
 export const install = $state({
   canPrompt: false,
-  installed: window.matchMedia('(display-mode: standalone)').matches || (navigator as unknown as { standalone?: boolean }).standalone === true,
+  installed:
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true,
   ios: /iPhone|iPad|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1),
   android: /Android/.test(ua),
   secure: window.isSecureContext,

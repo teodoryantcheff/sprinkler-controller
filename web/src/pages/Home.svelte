@@ -49,7 +49,10 @@
   async function startRun(e: Event) {
     e.preventDefault()
     const name = zoneName(cache.zones, pickZone)
-    await act(() => api('POST', '/api/run/zone', { zone_id: pickZone, seconds: Math.round(pickMinutes * 60) }), `${name}: ${minutes(pickMinutes * 60)}`)
+    await act(
+      () => api('POST', '/api/run/zone', { zone_id: pickZone, seconds: Math.round(pickMinutes * 60) }),
+      `${name}: ${minutes(pickMinutes * 60)}`,
+    )
     runDialog.close()
   }
 
@@ -67,7 +70,9 @@
 <header class="top">
   <h1>{t('home')}</h1>
   <div class="row">
-    {#if install.canPrompt && !install.installed}<button class="small" onclick={promptInstall}>{t('install_app')}</button>{/if}
+    {#if install.canPrompt && !install.installed}<button class="small" onclick={promptInstall}
+        >{t('install_app')}</button
+      >{/if}
     <span class="chip {live.connected ? 'ok' : 'warn'} small">{live.connected ? t('live') : t('offline')}</span>
   </div>
 </header>
@@ -79,7 +84,9 @@
     <div class="banner bad" role="alert">
       <strong>{t('fault')}</strong>
       <div class="small">{s.runner.fault}</div>
-      <button class="danger" style="margin-top:8px" onclick={() => act(() => api('POST', '/api/fault/clear', {}))}>{t('clear_fault')}</button>
+      <button class="danger" style="margin-top:8px" onclick={() => act(() => api('POST', '/api/fault/clear', {}))}
+        >{t('clear_fault')}</button
+      >
     </div>
   {/if}
   {#if !s.controller_on}<div class="banner warn">{t('controller_off')}</div>{/if}
@@ -105,8 +112,10 @@
 
   <h2>{t('running_now')}</h2>
   {#if s.runner.paused}
-    <div class="banner warn row spread"><span>{t('paused')}</span>
-      <button onclick={() => act(() => api('POST', '/api/resume', {}))}>{t('resume')}</button></div>
+    <div class="banner warn row spread">
+      <span>{t('paused')}</span>
+      <button onclick={() => act(() => api('POST', '/api/resume', {}))}>{t('resume')}</button>
+    </div>
   {/if}
   {#if s.runner.running.length === 0}
     <div class="card muted">{t('nothing_running')}</div>
@@ -126,7 +135,9 @@
       </div>
     {/each}
     {#if !s.runner.paused}
-      <div class="row" style="margin-top:8px"><button class="small" onclick={() => act(() => api('POST', '/api/pause', {}))}>{t('pause')}</button></div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" onclick={() => act(() => api('POST', '/api/pause', {}))}>{t('pause')}</button>
+      </div>
     {/if}
   {/if}
 
@@ -141,7 +152,11 @@
               <div class="small muted">{programName(cache.programs, r.program_id)} · {dur(r.remaining)}</div>
             </div>
             <span class="tnum small muted">{clock(r.est_start, tz)}</span>
-            <button class="icon-btn ghost" aria-label={t('stop')} onclick={() => act(() => api('POST', '/api/stop', { run_id: r.run_id }))}>✕</button>
+            <button
+              class="icon-btn ghost"
+              aria-label={t('stop')}
+              onclick={() => act(() => api('POST', '/api/stop', { run_id: r.run_id }))}>✕</button
+            >
           </li>
         {/each}
       </ul>
@@ -158,7 +173,9 @@
           <li class="row spread">
             <div class="grow">
               <div>{zoneName(cache.zones, n.zone_id)}</div>
-              <div class="small muted">{programName(cache.programs, n.program_id)}{n.scale_pct !== 100 ? ` · ${n.scale_pct}%` : ''}</div>
+              <div class="small muted">
+                {programName(cache.programs, n.program_id)}{n.scale_pct !== 100 ? ` · ${n.scale_pct}%` : ''}
+              </div>
             </div>
             <div style="text-align:right">
               <div class="tnum">{when(n.est_start, tz, new Date(serverNow))}</div>
@@ -174,7 +191,9 @@
     <h2>{t('sim_sensor')}</h2>
     <div class="card row spread">
       <span>{s.sensor.raw ? t('sensor_wet') : t('sensor_dry')}</span>
-      <button onclick={() => act(() => api('POST', '/api/sim/sensor', { wet: !s.sensor.raw }))}>{s.sensor.raw ? t('make_dry') : t('make_wet')}</button>
+      <button onclick={() => act(() => api('POST', '/api/sim/sensor', { wet: !s.sensor.raw }))}
+        >{s.sensor.raw ? t('make_dry') : t('make_wet')}</button
+      >
     </div>
   {/if}
 {/if}
@@ -182,16 +201,27 @@
 <dialog bind:this={runDialog}>
   <form class="stack" onsubmit={startRun}>
     <h3>{t('run_zone')}</h3>
-    <label class="field"><span>{t('zone')}</span>
+    <label class="field"
+      ><span>{t('zone')}</span>
       <select bind:value={pickZone}>
         {#each runnable as z}<option value={z.id}>{z.output_index + 1}. {z.name}</option>{/each}
       </select>
     </label>
-    <label class="field"><span>{t('minutes')}</span>
-      <input type="number" min="0.1" max={cache.zones.find((z) => z.id === pickZone)?.max_minutes ?? 120} step="any" bind:value={pickMinutes} required />
+    <label class="field"
+      ><span>{t('minutes')}</span>
+      <input
+        type="number"
+        min="0.1"
+        max={cache.zones.find((z) => z.id === pickZone)?.max_minutes ?? 120}
+        step="any"
+        bind:value={pickMinutes}
+        required
+      />
     </label>
     <div class="row wrap-row">
-      {#each [1, 5, 10, 20, 30] as m}<button type="button" class="chip" onclick={() => (pickMinutes = m)}>{m} {t('min')}</button>{/each}
+      {#each [1, 5, 10, 20, 30] as m}<button type="button" class="chip" onclick={() => (pickMinutes = m)}
+          >{m} {t('min')}</button
+        >{/each}
     </div>
     <div class="row">
       <button type="button" class="grow" onclick={() => runDialog.close()}>{t('cancel')}</button>

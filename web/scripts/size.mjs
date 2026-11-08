@@ -13,5 +13,8 @@ const walk = (d) => {
 }
 walk(dir)
 const kb = (total / 1024).toFixed(1)
-if (total > 150 * 1024) { console.error(`UI is ${kb} KB gzipped, over the 150 KB budget`); process.exit(1) }
+if (total > 150 * 1024) {
+  console.error(`UI is ${kb} KB gzipped, over the 150 KB budget`)
+  process.exit(1)
+}
 console.log(`UI size: ${kb} KB gzipped (budget 150 KB)`)

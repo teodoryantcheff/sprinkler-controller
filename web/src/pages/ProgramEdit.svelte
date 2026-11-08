@@ -11,9 +11,23 @@
 
   function blank(): Program {
     return {
-      id: 0, name: '', enabled: true, weather_scaled: true, sort_order: 0, season_from: '', season_to: '',
+      id: 0,
+      name: '',
+      enabled: true,
+      weather_scaled: true,
+      sort_order: 0,
+      season_from: '',
+      season_to: '',
       day_rule: { kind: 'weekdays', days: ['mon', 'wed', 'fri'], every: 2, anchor: today, parity: '' },
-      start_rule: { kind: 'fixed', times: ['06:00'], first: '05:00', every_min: 60, count: 1, event: 'sunrise', offset_min: -30 },
+      start_rule: {
+        kind: 'fixed',
+        times: ['06:00'],
+        first: '05:00',
+        every_min: 60,
+        count: 1,
+        event: 'sunrise',
+        offset_min: -30,
+      },
       zones: [],
     }
   }
@@ -43,7 +57,10 @@
     else {
       await loadPrograms()
       const found = cache.programs.find((x) => x.id === Number(id))
-      if (!found) { error = 'Not found'; return }
+      if (!found) {
+        error = 'Not found'
+        return
+      }
       const copy: Program = JSON.parse(JSON.stringify(found))
       const b = blank()
       copy.day_rule = { ...b.day_rule, ...copy.day_rule, parity: copy.day_rule.parity || '' }
@@ -61,15 +78,35 @@
   function payload(): Program {
     const d = p.day_rule
     const day_rule =
-      d.kind === 'weekdays' ? { kind: d.kind, days: d.days, parity: d.parity || undefined, skip31: d.parity === 'odd' ? d.skip31 : undefined }
-      : d.kind === 'interval' ? { kind: d.kind, every: Number(d.every), anchor: d.anchor, parity: d.parity || undefined, skip31: d.parity === 'odd' ? d.skip31 : undefined }
-      : { kind: d.kind, parity: d.parity || 'odd', skip31: d.skip31 }
+      d.kind === 'weekdays'
+        ? {
+            kind: d.kind,
+            days: d.days,
+            parity: d.parity || undefined,
+            skip31: d.parity === 'odd' ? d.skip31 : undefined,
+          }
+        : d.kind === 'interval'
+          ? {
+              kind: d.kind,
+              every: Number(d.every),
+              anchor: d.anchor,
+              parity: d.parity || undefined,
+              skip31: d.parity === 'odd' ? d.skip31 : undefined,
+            }
+          : { kind: d.kind, parity: d.parity || 'odd', skip31: d.skip31 }
     const s = p.start_rule
     const start_rule =
-      s.kind === 'fixed' ? { kind: s.kind, times: rows.map(specOf) }
-      : s.kind === 'repeat' ? { kind: s.kind, first: specOf(repeatFirst), every_min: Number(s.every_min), count: Number(s.count) }
-      : { kind: s.kind, event: s.event, offset_min: Number(s.offset_min) }
-    return { ...p, name: p.name || 'preview', day_rule: day_rule as Program['day_rule'], start_rule: start_rule as Program['start_rule'] }
+      s.kind === 'fixed'
+        ? { kind: s.kind, times: rows.map(specOf) }
+        : s.kind === 'repeat'
+          ? { kind: s.kind, first: specOf(repeatFirst), every_min: Number(s.every_min), count: Number(s.count) }
+          : { kind: s.kind, event: s.event, offset_min: Number(s.offset_min) }
+    return {
+      ...p,
+      name: p.name || 'preview',
+      day_rule: day_rule as Program['day_rule'],
+      start_rule: start_rule as Program['start_rule'],
+    }
   }
 
   // Live preview of the next 5 starts, debounced.
@@ -116,7 +153,9 @@
       await api('DELETE', `/api/programs/${p.id}`)
       await loadPrograms()
       go('/programs')
-    } catch (e) { toast(errMsg(e), true) }
+    } catch (e) {
+      toast(errMsg(e), true)
+    }
   }
 
   function toggleDay(d: string) {
@@ -160,8 +199,16 @@
   }
 
   const tz = $derived(live.status?.timezone || 'Europe/Sofia')
-  const dayKinds: { k: Program['day_rule']['kind']; l: Key }[] = [{ k: 'weekdays', l: 'weekdays' }, { k: 'interval', l: 'interval' }, { k: 'oddeven', l: 'oddeven' }]
-  const startKinds: { k: Program['start_rule']['kind']; l: Key }[] = [{ k: 'fixed', l: 'fixed' }, { k: 'repeat', l: 'repeat' }, { k: 'solar', l: 'solar' }]
+  const dayKinds: { k: Program['day_rule']['kind']; l: Key }[] = [
+    { k: 'weekdays', l: 'weekdays' },
+    { k: 'interval', l: 'interval' },
+    { k: 'oddeven', l: 'oddeven' },
+  ]
+  const startKinds: { k: Program['start_rule']['kind']; l: Key }[] = [
+    { k: 'fixed', l: 'fixed' },
+    { k: 'repeat', l: 'repeat' },
+    { k: 'solar', l: 'solar' },
+  ]
 </script>
 
 {#snippet timeRow(r: TimeRow)}
@@ -186,7 +233,13 @@
 {#if !loaded}
   <p class="muted">{error || t('loading')}</p>
 {:else}
-  <form class="stack" onsubmit={(e) => { e.preventDefault(); save() }}>
+  <form
+    class="stack"
+    onsubmit={(e) => {
+      e.preventDefault()
+      save()
+    }}
+  >
     <div class="card stack">
       <label class="field"><span>{t('name')}</span><input bind:value={p.name} required maxlength="40" /></label>
       <label class="check"><input type="checkbox" bind:checked={p.enabled} />{t('enabled')}</label>
@@ -197,29 +250,46 @@
     <div class="card stack">
       <div class="seg" role="group">
         {#each dayKinds as k}
-          <button type="button" aria-pressed={p.day_rule.kind === k.k} onclick={() => (p.day_rule.kind = k.k)}>{t(k.l)}</button>
+          <button type="button" aria-pressed={p.day_rule.kind === k.k} onclick={() => (p.day_rule.kind = k.k)}
+            >{t(k.l)}</button
+          >
         {/each}
       </div>
       {#if p.day_rule.kind === 'weekdays'}
         <div class="days">
           {#each WEEKDAYS as d}
-            <button type="button" aria-pressed={(p.day_rule.days || []).includes(d)} onclick={() => toggleDay(d)}>{t(d)}</button>
+            <button type="button" aria-pressed={(p.day_rule.days || []).includes(d)} onclick={() => toggleDay(d)}
+              >{t(d)}</button
+            >
           {/each}
         </div>
       {:else if p.day_rule.kind === 'interval'}
         <div class="row wrap-row">
           <span>{t('every')}</span><input type="number" min="1" max="365" bind:value={p.day_rule.every} required />
-          <span>{t('days_unit')}, {t('starting')}</span><input type="date" bind:value={p.day_rule.anchor} required style="width:auto" />
+          <span>{t('days_unit')}, {t('starting')}</span><input
+            type="date"
+            bind:value={p.day_rule.anchor}
+            required
+            style="width:auto"
+          />
         </div>
       {/if}
       <div class="row wrap-row">
         <span class="small muted">{t('only_dates')}</span>
         <div class="seg" role="group">
           {#if p.day_rule.kind !== 'oddeven'}
-            <button type="button" aria-pressed={!p.day_rule.parity} onclick={() => (p.day_rule.parity = '')}>{t('any')}</button>
+            <button type="button" aria-pressed={!p.day_rule.parity} onclick={() => (p.day_rule.parity = '')}
+              >{t('any')}</button
+            >
           {/if}
-          <button type="button" aria-pressed={p.day_rule.parity === 'odd' || (p.day_rule.kind === 'oddeven' && !p.day_rule.parity)} onclick={() => (p.day_rule.parity = 'odd')}>{t('odd')}</button>
-          <button type="button" aria-pressed={p.day_rule.parity === 'even'} onclick={() => (p.day_rule.parity = 'even')}>{t('even')}</button>
+          <button
+            type="button"
+            aria-pressed={p.day_rule.parity === 'odd' || (p.day_rule.kind === 'oddeven' && !p.day_rule.parity)}
+            onclick={() => (p.day_rule.parity = 'odd')}>{t('odd')}</button
+          >
+          <button type="button" aria-pressed={p.day_rule.parity === 'even'} onclick={() => (p.day_rule.parity = 'even')}
+            >{t('even')}</button
+          >
         </div>
       </div>
       {#if p.day_rule.parity === 'odd' || (p.day_rule.kind === 'oddeven' && !p.day_rule.parity)}
@@ -227,8 +297,18 @@
       {/if}
       <div class="small muted">{t('season')} — {t('season_hint')}</div>
       <div class="row wrap-row">
-        <span>{t('from')}</span><input placeholder="MM-DD" pattern="\d\d-\d\d" bind:value={p.season_from} style="width:6em" />
-        <span>{t('to')}</span><input placeholder="MM-DD" pattern="\d\d-\d\d" bind:value={p.season_to} style="width:6em" />
+        <span>{t('from')}</span><input
+          placeholder="MM-DD"
+          pattern="\d\d-\d\d"
+          bind:value={p.season_from}
+          style="width:6em"
+        />
+        <span>{t('to')}</span><input
+          placeholder="MM-DD"
+          pattern="\d\d-\d\d"
+          bind:value={p.season_to}
+          style="width:6em"
+        />
       </div>
     </div>
 
@@ -236,24 +316,43 @@
     <div class="card stack">
       <div class="seg" role="group">
         {#each startKinds as k}
-          <button type="button" aria-pressed={p.start_rule.kind === k.k} onclick={() => (p.start_rule.kind = k.k)}>{t(k.l)}</button>
+          <button type="button" aria-pressed={p.start_rule.kind === k.k} onclick={() => (p.start_rule.kind = k.k)}
+            >{t(k.l)}</button
+          >
         {/each}
       </div>
       {#if p.start_rule.kind === 'fixed'}
         {#each rows as r, i}
           <div class="row wrap-row">
             {@render timeRow(r)}
-            {#if rows.length > 1}<button type="button" class="icon-btn ghost" aria-label={t('delete')} onclick={() => (rows = rows.filter((_, j) => j !== i))}>✕</button>{/if}
+            {#if rows.length > 1}<button
+                type="button"
+                class="icon-btn ghost"
+                aria-label={t('delete')}
+                onclick={() => (rows = rows.filter((_, j) => j !== i))}>✕</button
+              >{/if}
           </div>
         {/each}
         {#if rows.length < 4}
-          <div><button type="button" onclick={() => (rows = [...rows, { mode: 'clock', clock: '19:00', offset: 0 }])}>+ {t('add')}</button></div>
+          <div>
+            <button type="button" onclick={() => (rows = [...rows, { mode: 'clock', clock: '19:00', offset: 0 }])}
+              >+ {t('add')}</button
+            >
+          </div>
         {/if}
       {:else if p.start_rule.kind === 'repeat'}
         <div class="row wrap-row"><span>{t('first_start')}</span>{@render timeRow(repeatFirst)}</div>
         <div class="row wrap-row">
-          <span>{t('repeat_every')}</span><input type="number" min="1" max="1440" bind:value={p.start_rule.every_min} required /><span>{t('min')},</span>
-          <input type="number" min="0" max="1440" bind:value={p.start_rule.count} required /><span>{t('more_times')}</span>
+          <span>{t('repeat_every')}</span><input
+            type="number"
+            min="1"
+            max="1440"
+            bind:value={p.start_rule.every_min}
+            required
+          /><span>{t('min')},</span>
+          <input type="number" min="0" max="1440" bind:value={p.start_rule.count} required /><span
+            >{t('more_times')}</span
+          >
         </div>
       {:else}
         <div class="row wrap-row">
@@ -268,23 +367,57 @@
 
     <h2>{t('zone_order')}</h2>
     <div class="card">
-      <ul class="list" onpointermove={onPointerMove} onpointerup={() => (dragIndex = null)} onpointercancel={() => (dragIndex = null)}>
+      <ul
+        class="list"
+        onpointermove={onPointerMove}
+        onpointerup={() => (dragIndex = null)}
+        onpointercancel={() => (dragIndex = null)}
+      >
         {#each p.zones as pz, i (pz.zone_id)}
           <li class="row" data-zi={i} class:dragging={dragIndex === i}>
-            <span class="drag" onpointerdown={(e) => onPointerDown(i, e)} role="button" tabindex="-1" aria-label="drag">⠿</span>
+            <span class="drag" onpointerdown={(e) => onPointerDown(i, e)} role="button" tabindex="-1" aria-label="drag"
+              >⠿</span
+            >
             <span class="grow" style="overflow-wrap:anywhere">{zoneName(cache.zones, pz.zone_id)}</span>
-            <input type="number" min="0.2" max="720" step="any" value={pz.seconds / 60} style="width:4.2em;padding:8px 6px"
-              oninput={(e) => (pz.seconds = Math.round(Number((e.target as HTMLInputElement).value) * 60))} aria-label={t('minutes')} />
+            <input
+              type="number"
+              min="0.2"
+              max="720"
+              step="any"
+              value={pz.seconds / 60}
+              style="width:4.2em;padding:8px 6px"
+              oninput={(e) => (pz.seconds = Math.round(Number((e.target as HTMLInputElement).value) * 60))}
+              aria-label={t('minutes')}
+            />
             <span class="small muted">{t('min')}</span>
-            <button type="button" class="icon-btn ghost" style="padding:0 6px;min-width:34px" aria-label="up" onclick={() => move(i, -1)} disabled={i === 0}>↑</button>
-            <button type="button" class="icon-btn ghost" style="padding:0 6px;min-width:34px" aria-label={t('delete')} onclick={() => (p.zones = p.zones.filter((_, j) => j !== i))}>✕</button>
+            <button
+              type="button"
+              class="icon-btn ghost"
+              style="padding:0 6px;min-width:34px"
+              aria-label="up"
+              onclick={() => move(i, -1)}
+              disabled={i === 0}>↑</button
+            >
+            <button
+              type="button"
+              class="icon-btn ghost"
+              style="padding:0 6px;min-width:34px"
+              aria-label={t('delete')}
+              onclick={() => (p.zones = p.zones.filter((_, j) => j !== i))}>✕</button
+            >
           </li>
         {/each}
       </ul>
       {#if freeZones.length}
         <div class="row" style="margin-top:8px">
-          <select value={addZoneId || freeZones[0]?.id} onchange={(e) => (addZoneId = Number((e.target as HTMLSelectElement).value))} class="grow">
-            {#each freeZones as z}<option value={z.id}>{z.output_index + 1}. {z.name}{z.enabled ? '' : ` (${t('disabled')})`}</option>{/each}
+          <select
+            value={addZoneId || freeZones[0]?.id}
+            onchange={(e) => (addZoneId = Number((e.target as HTMLSelectElement).value))}
+            class="grow"
+          >
+            {#each freeZones as z}<option value={z.id}
+                >{z.output_index + 1}. {z.name}{z.enabled ? '' : ` (${t('disabled')})`}</option
+              >{/each}
           </select>
           <button type="button" onclick={addZone}>+ {t('add_zone')}</button>
         </div>
@@ -301,9 +434,15 @@
         <ul class="list">
           {#each preview as s}
             <li>
-              <div class="row spread"><strong class="tnum">{when(s.time, tz)}</strong><span class="small muted">{dur(s.total_seconds)} {t('total')}</span></div>
+              <div class="row spread">
+                <strong class="tnum">{when(s.time, tz)}</strong><span class="small muted"
+                  >{dur(s.total_seconds)} {t('total')}</span
+                >
+              </div>
               <div class="small muted">
-                {#each s.runs as r, i}{i ? ' → ' : ''}<span class:muted={!!r.skip}>{zoneName(cache.zones, r.zone_id)} {clock(r.est_start, tz)} ({dur(r.seconds)})</span>{/each}
+                {#each s.runs as r, i}{i ? ' → ' : ''}<span class:muted={!!r.skip}
+                    >{zoneName(cache.zones, r.zone_id)} {clock(r.est_start, tz)} ({dur(r.seconds)})</span
+                  >{/each}
               </div>
             </li>
           {/each}

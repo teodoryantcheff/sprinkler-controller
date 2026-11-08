@@ -49,7 +49,11 @@
 
   const tabs = [
     { path: '/', key: 'home', icon: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z' },
-    { path: '/programs', key: 'programs', icon: 'M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 12h3v3H8z' },
+    {
+      path: '/programs',
+      key: 'programs',
+      icon: 'M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 12h3v3H8z',
+    },
     { path: '/zones', key: 'zones', icon: 'M12 3c-4 6-7 9-7 13a7 7 0 0 0 14 0c0-4-3-7-7-13z' },
     { path: '/history', key: 'history', icon: 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5' },
     { path: '/settings', key: 'settings', icon: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4' },
@@ -67,13 +71,22 @@
       {#if session.setupRequired}
         <p class="muted small">{t('setup_title')}. {t('setup_hint')}</p>
       {/if}
-      <label class="field"><span>{t('password')}</span>
-        <input type="password" bind:value={password} autocomplete={session.setupRequired ? 'new-password' : 'current-password'} minlength={session.setupRequired ? 7 : undefined} required />
+      <label class="field"
+        ><span>{t('password')}</span>
+        <input
+          type="password"
+          bind:value={password}
+          autocomplete={session.setupRequired ? 'new-password' : 'current-password'}
+          minlength={session.setupRequired ? 7 : undefined}
+          required
+        />
       </label>
       {#if error}<div class="chip bad">{error}</div>{/if}
       <button class="primary big" disabled={busy}>{session.setupRequired ? t('create') : t('login')}</button>
       <div class="row">
-        <button type="button" class="ghost small" onclick={() => setLang(i18n.lang === 'en' ? 'bg' : 'en')}>{i18n.lang === 'en' ? 'Български' : 'English'}</button>
+        <button type="button" class="ghost small" onclick={() => setLang(i18n.lang === 'en' ? 'bg' : 'en')}
+          >{i18n.lang === 'en' ? 'Български' : 'English'}</button
+        >
       </div>
     </form>
   </div>
@@ -98,7 +111,15 @@
   <nav class="tabs" aria-label="Main">
     {#each tabs as tab}
       <a href={'#' + tab.path} aria-current={section === tab.path ? 'page' : undefined}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={tab.icon} /></svg>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"><path d={tab.icon} /></svg
+        >
         {t(tab.key)}
       </a>
     {/each}
