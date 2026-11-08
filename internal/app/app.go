@@ -243,7 +243,7 @@ func (a *App) RunProgramNow(id int64) ([]int64, error) {
 // SensorTick reads the sensor and applies its on/off delays.
 func (a *App) SensorTick(now time.Time) {
 	settings, _, _, _ := a.Snapshot()
-	var in hw.Input = a.Sensor
+	in := a.Sensor
 	if a.SimSensor != nil {
 		in = a.SimSensor
 	}
@@ -395,8 +395,10 @@ type SensorState struct {
 func (a *App) SensorState() SensorState {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return SensorState{Enabled: a.settings.Sensor.Enabled, Wet: a.sensorWet, Raw: a.sensorRaw, Error: a.sensorErr,
-		Sim: a.SimSensor != nil, Kind: a.settings.Sensor.Kind}
+	return SensorState{
+		Enabled: a.settings.Sensor.Enabled, Wet: a.sensorWet, Raw: a.sensorRaw, Error: a.sensorErr,
+		Sim: a.SimSensor != nil, Kind: a.settings.Sensor.Kind,
+	}
 }
 
 // Subscribe returns a channel that receives a value after state changes.

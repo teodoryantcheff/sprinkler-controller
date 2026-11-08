@@ -29,10 +29,12 @@ func setup(t *testing.T) (*App, *hw.Sim, *store.Store) {
 			t.Fatal(err)
 		}
 	}
-	p := core.Program{Name: "Morning", Enabled: true, WeatherScaled: true,
+	p := core.Program{
+		Name: "Morning", Enabled: true, WeatherScaled: true,
 		DayRule:   core.DayRule{Kind: "interval", Every: 1, Anchor: "2026-01-01"},
 		StartRule: core.StartRule{Kind: "fixed", Times: []string{"06:00"}},
-		Zones:     []core.ProgramZone{{ZoneID: 1, Seconds: 600}, {ZoneID: 2, Seconds: 300}}}
+		Zones:     []core.ProgramZone{{ZoneID: 1, Seconds: 600}, {ZoneID: 2, Seconds: 300}},
+	}
 	if err := st.SaveProgram(&p); err != nil {
 		t.Fatal(err)
 	}

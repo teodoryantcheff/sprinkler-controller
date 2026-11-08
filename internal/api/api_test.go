@@ -88,7 +88,12 @@ func TestAuthFlowAndManualRun(t *testing.T) {
 	// Writes must be JSON (CSRF guard).
 	req, _ := http.NewRequest("POST", srv.URL+"/api/stop", strings.NewReader("{}"))
 	req.Header.Set("Content-Type", "text/plain")
-	if resp, _ := c.Do(req); resp.StatusCode != http.StatusUnsupportedMediaType {
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
 		t.Fatalf("non-JSON write: %d", resp.StatusCode)
 	}
 	if code, out := call(t, c, "POST", srv.URL+"/api/run/zone", `{"zone_id":1,"seconds":60}`); code != 200 {

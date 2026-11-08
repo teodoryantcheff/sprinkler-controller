@@ -20,8 +20,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BurntSushi/toml"
-
 	"sprinkler/internal/api"
 	"sprinkler/internal/app"
 	"sprinkler/internal/hw"
@@ -29,6 +27,8 @@ import (
 	"sprinkler/internal/runner"
 	"sprinkler/internal/store"
 	"sprinkler/internal/tlscert"
+
+	"github.com/BurntSushi/toml"
 )
 
 var version = "dev"
@@ -248,7 +248,9 @@ func serve(args []string, log *slog.Logger) (err error) {
 	var servers []*http.Server
 	fail := func(err error) error {
 		stop()
-		<-runnerDone
+		if rerr := <-runnerDone; rerr != nil {
+			return errors.Join(err, rerr)
+		}
 		return err
 	}
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
@@ -351,7 +353,7 @@ func sdNotify(msg string) {
 		return
 	}
 	defer c.Close()
-	c.Write([]byte(msg))
+	_, _ = c.Write([]byte(msg))
 }
 
 // watchdog returns a callback for the runner loop that pings systemd's

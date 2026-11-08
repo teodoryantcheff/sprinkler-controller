@@ -13,7 +13,7 @@ import (
 
 	"sprinkler/internal/core"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 var migrations = []string{
@@ -307,22 +307,20 @@ func (s *Store) Programs() ([]core.Program, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close() // also closed early below, before the next query
 	var out []core.Program
 	for rows.Next() {
 		var p core.Program
 		var en, ws int
 		var dr, sr string
 		if err := rows.Scan(&p.ID, &p.Name, &en, &dr, &sr, &p.SeasonFrom, &p.SeasonTo, &ws, &p.SortOrder); err != nil {
-			rows.Close()
 			return nil, err
 		}
 		p.Enabled, p.WeatherScaled = en == 1, ws == 1
 		if err := json.Unmarshal([]byte(dr), &p.DayRule); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("program %d day_rule: %w", p.ID, err)
 		}
 		if err := json.Unmarshal([]byte(sr), &p.StartRule); err != nil {
-			rows.Close()
 			return nil, fmt.Errorf("program %d start_rule: %w", p.ID, err)
 		}
 		p.Zones = []core.ProgramZone{}
@@ -509,7 +507,8 @@ func (s *Store) Runs(f RunFilter) ([]core.Run, error) {
 	if f.Limit <= 0 || f.Limit > 1000 {
 		f.Limit = 100
 	}
-	q := "SELECT " + runCols + " FROM runs WHERE " + strings.Join(where, " AND ") + " ORDER BY COALESCE(start, planned_start) DESC, id DESC LIMIT ?"
+	// where holds only fixed clauses with ? placeholders.
+	q := "SELECT " + runCols + " FROM runs WHERE " + strings.Join(where, " AND ") + " ORDER BY COALESCE(start, planned_start) DESC, id DESC LIMIT ?" //nolint:gosec // G202: no user input in the SQL text
 	args = append(args, f.Limit)
 	rows, err := s.DB.Query(q, args...)
 	if err != nil {

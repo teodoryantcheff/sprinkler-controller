@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,12 +29,14 @@ func (m *memStore) InsertRun(r *core.Run) error {
 	m.runs[r.ID] = *r
 	return nil
 }
+
 func (m *memStore) UpdateRun(r *core.Run) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.runs[r.ID] = *r
 	return nil
 }
+
 func (m *memStore) AddEvent(t time.Time, kind string, _ any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -41,8 +44,10 @@ func (m *memStore) AddEvent(t time.Time, kind string, _ any) error {
 	return nil
 }
 
-var sofia, _ = time.LoadLocation("Europe/Sofia")
-var t0 = time.Date(2026, 11, 7, 6, 0, 0, 0, sofia)
+var (
+	sofia, _ = time.LoadLocation("Europe/Sofia")
+	t0       = time.Date(2026, 11, 7, 6, 0, 0, 0, sofia)
+)
 
 type rig struct {
 	t   *testing.T
@@ -169,7 +174,7 @@ func TestManualPreemptsScheduled(t *testing.T) {
 	if r := g.st.runs[man[0]]; r.Outcome != core.OutcomeDone || r.ActualSeconds != 20 {
 		t.Errorf("manual run %+v", r)
 	}
-	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 99, Seconds: 5, Manual: true}}); err != ErrUnknownZone {
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 99, Seconds: 5, Manual: true}}); !errors.Is(err, ErrUnknownZone) {
 		t.Errorf("unknown zone: %v", err)
 	}
 }
@@ -244,7 +249,7 @@ func TestOutputFailureFaults(t *testing.T) {
 	if st.Fault == "" || len(st.Running) != 0 || len(st.Queue) != 0 {
 		t.Errorf("fault state: %+v", st)
 	}
-	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 3, Seconds: 5}}); err != ErrFault {
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 3, Seconds: 5}}); !errors.Is(err, ErrFault) {
 		t.Errorf("enqueue during fault: %v", err)
 	}
 	g.r.ClearFault(g.now)
@@ -273,7 +278,7 @@ func TestMasterValveDelays(t *testing.T) {
 	g.want("00000001") // off-delay
 	g.advance(10)
 	g.want("00000000")
-	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 8, Seconds: 5, Manual: true}}); err != ErrMasterZone {
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 8, Seconds: 5, Manual: true}}); !errors.Is(err, ErrMasterZone) {
 		t.Errorf("running the master as a zone: %v", err)
 	}
 }
@@ -377,7 +382,7 @@ func TestManualPausesWholeGroup(t *testing.T) {
 	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 4, Seconds: 30, Manual: true}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 4, Seconds: 30, Manual: true}}); err != ErrAlreadyQueued {
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 4, Seconds: 30, Manual: true}}); !errors.Is(err, ErrAlreadyQueued) {
 		t.Errorf("second manual run of the same zone: %v", err)
 	}
 }

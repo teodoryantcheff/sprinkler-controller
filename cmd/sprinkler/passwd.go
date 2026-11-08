@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/BurntSushi/toml"
-	"golang.org/x/term"
-
 	"sprinkler/internal/api"
 	"sprinkler/internal/store"
+
+	"github.com/BurntSushi/toml"
+	"golang.org/x/term"
 )
 
 // passwdCmd sets a user's password directly in the database, for when the

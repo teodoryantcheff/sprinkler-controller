@@ -28,8 +28,10 @@ func at(s string) time.Time {
 }
 
 func prog(day core.DayRule, start core.StartRule) core.Program {
-	return core.Program{ID: 1, Name: "p", Enabled: true, DayRule: day, StartRule: start,
-		Zones: []core.ProgramZone{{ZoneID: 1, Seconds: 600}}}
+	return core.Program{
+		ID: 1, Name: "p", Enabled: true, DayRule: day, StartRule: start,
+		Zones: []core.ProgramZone{{ZoneID: 1, Seconds: 600}},
+	}
 }
 
 func fixed(times ...string) core.StartRule { return core.StartRule{Kind: "fixed", Times: times} }

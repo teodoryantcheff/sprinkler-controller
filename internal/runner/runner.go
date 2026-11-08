@@ -781,8 +781,10 @@ func (r *Runner) Snapshot(now time.Time) State {
 	now = now.UTC()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	st := State{Paused: r.paused, Fault: r.fault, MasterOn: r.masterOn, Outputs: append([]bool(nil), r.lastStates...), Driver: r.out.Name(),
-		Running: []RunView{}, Queue: []RunView{}}
+	st := State{
+		Paused: r.paused, Fault: r.fault, MasterOn: r.masterOn, Outputs: append([]bool(nil), r.lastStates...), Driver: r.out.Name(),
+		Running: []RunView{}, Queue: []RunView{},
+	}
 	delay := time.Duration(r.settings.StationDelayS) * time.Second
 	for _, k := range r.laneKeys() {
 		l := r.lanes[k]
