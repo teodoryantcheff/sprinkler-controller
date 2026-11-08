@@ -14,13 +14,15 @@ The JSON API the web UI uses. It is not compatible with the OpenSprinkler API. T
 
 Log in with `POST /api/login`. The server sets a session cookie, `sprinkler_session`: HMAC-signed, `HttpOnly`, `SameSite=Strict`, valid for 180 days, and `Secure` when the login came over HTTPS. Send it back on every request.
 
-If the `lan_no_login` setting is on, requests from loopback, private (RFC 1918 / ULA) or link-local addresses are let in without a cookie, as user `lan`. Proxy headers are not trusted. A LAN caller can't change the password (`/api/password` needs a real session).
+If the `lan_no_login` setting is on, requests from loopback, private (RFC 1918 / ULA) or link-local addresses are let in without a cookie, as user `lan`. Proxy headers are not trusted. The request must also be addressed to a local name: an IP address, a single-label name such as `sprinklerpi`, or a name ending in `.local`, `.lan`, `.home.arpa`, `.internal` or `.localdomain`. Other `Host` names need a login, so a public DNS name pointed at the controller (DNS rebinding) can't use LAN access from a web page. A LAN caller can't change the password (`/api/password` needs a real session).
 
 Endpoints marked **open** need no login. All others return `401 {"error":"login required"}` without one.
 
 ### Writes
 
 Every authenticated request that is not `GET`/`HEAD` must send `Content-Type: application/json`, **even with no body** (e.g. `DELETE`, `/api/pause`). Without it the server answers `415 {"error":"send JSON"}`. Together with the `SameSite=Strict` cookie, this keeps cross-site form posts out.
+
+Browser requests that change something (`POST`, `PUT`, `DELETE`, open endpoints included) are also refused with `403` when `Sec-Fetch-Site` or `Origin` shows they come from another site. Clients that send neither header, such as `curl`, are not affected.
 
 Bodies are limited to 1 MiB. Endpoints that read a body need valid JSON; send `{}` where every field is optional. An empty body gives `400 bad JSON: EOF`.
 
@@ -33,10 +35,11 @@ Bodies are limited to 1 MiB. Endpoints that read a body need valid JSON; send `{
 | --- | --- |
 | 400 | Bad JSON, validation failure, unknown or disabled zone, bad duration, zone already has a manual run, master valve used as a zone |
 | 401 | Not logged in, or wrong name/password at login |
-| 403 | `/api/setup` after setup is done; wrong current password |
+| 403 | `/api/setup` after setup is done; wrong current password; cross-site browser write |
 | 404 | Unknown ID, run not queued or running, unknown `/api/...` path |
 | 409 | Outputs are in a fault state (clear it first); `/api/sim/sensor` with a real sensor |
 | 415 | Write without `Content-Type: application/json` |
+| 429 | Too many wrong passwords from one address (login or password change) |
 | 500 | Anything else (logged on the server) |
 
 ### Example
@@ -122,7 +125,7 @@ Creates the first user and logs in. Allowed only while there are no users (`403 
 
 ### `POST /api/login` (open)
 
-Same body as setup (`name` defaults to `admin`). Sets the session cookie. A wrong name or password returns `401` after a 700 ms delay.
+Same body as setup (`name` defaults to `admin`). Sets the session cookie. A wrong name or password returns `401` after a 700 ms delay. After 10 wrong passwords within 15 minutes from one address, that address gets `429` until the 15 minutes have passed.
 
 ### `POST /api/logout` (open)
 
@@ -134,7 +137,7 @@ Clears the cookie. Needs no body.
 { "current": "old password", "new": "new password" }
 ```
 
-Needs a cookie session, not LAN access. `403` if `current` is wrong, `400` if `new` is shorter than 7 characters. Existing sessions stay valid.
+Needs a cookie session, not LAN access. `403` if `current` is wrong, `400` if `new` is shorter than 7 characters. Every other session is logged out; the caller gets a fresh cookie. Wrong `current` passwords count towards the login limit (`429`).
 
 ## Status
 
@@ -484,7 +487,7 @@ The backup covers settings, zones and programs, but not users, history or events
 
 ### `POST /api/restore`
 
-The body is a backup (`version` must be 1). It **stops all runs**, then replaces all zones and programs and the settings in one transaction. Every program is validated first; `400` names the bad one. Logs a `restore` event.
+The body is a backup (`version` must be 1). It is validated first with the same rules as the zone, program and settings endpoints (`400` names the bad item, and nothing is stopped). It then **stops all runs** and replaces all zones and programs and the settings in one transaction. Logs a `restore` event.
 
 ## `GET /ca.crt` (open)
 
