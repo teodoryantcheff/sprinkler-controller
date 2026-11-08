@@ -1,4 +1,5 @@
 // Small shared UI state: toasts, router, theme.
+import { serverMsg } from './i18n.svelte'
 
 export const toastState = $state<{ msg: string; error: boolean; id: number }>({ msg: '', error: false, id: 0 })
 
@@ -15,7 +16,7 @@ export function toast(msg: string, error = false) {
 }
 
 export function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
+  return serverMsg(e instanceof Error ? e.message : String(e))
 }
 
 export const route = $state({ path: location.hash.slice(1) || '/' })

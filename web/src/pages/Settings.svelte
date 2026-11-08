@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { api, cache, loadZones, session, stopLive, type Settings } from '../lib/api.svelte'
-  import { t, i18n, setLang } from '../lib/i18n.svelte'
+  import { t, setLang } from '../lib/i18n.svelte'
   import { toast, errMsg, theme, applyTheme, type Theme } from '../lib/ui.svelte'
   import { install, promptInstall } from '../lib/install.svelte'
 
@@ -62,7 +62,7 @@
           s.lon = Math.round(p.coords.longitude * 1e5) / 1e5
         }
       },
-      (e) => toast(e.message, true),
+      () => toast(t('location_failed'), true),
     )
   }
 
@@ -345,5 +345,4 @@
     <div>{t('driver')}: <strong>{info.driver}</strong> · {t('outputs')}: {info.outputs}</div>
     <div class="muted">{t('version')} {info.version} · {info.hostname} · {info.arch} · {info.go}</div>
   </div>
-  <p class="small muted">{i18n.lang === 'bg' ? 'Език' : 'Language'}: {i18n.lang}</p>
 {/if}
