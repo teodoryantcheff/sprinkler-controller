@@ -308,16 +308,16 @@ func (s *Server) password(w http.ResponseWriter, r *http.Request) (any, error) {
 
 // Status is what the Home screen shows.
 type Status struct {
-	Now            time.Time               `json:"now"`
-	Runner         runner.State            `json:"runner"`
-	Next           []schedule.PlannedRun   `json:"next"`
-	WateringLevel  int                     `json:"watering_level"`
-	WateringSource string                  `json:"watering_source"`
-	RainDelayUntil *time.Time              `json:"rain_delay_until"`
-	Sensor         app.SensorState         `json:"sensor"`
-	ControllerOn   bool                    `json:"controller_on"`
-	Timezone       string                  `json:"timezone"`
-	Sun            map[string]time.Time    `json:"sun"`
+	Now            time.Time             `json:"now"`
+	Runner         runner.State          `json:"runner"`
+	Next           []schedule.PlannedRun `json:"next"`
+	WateringLevel  int                   `json:"watering_level"`
+	WateringSource string                `json:"watering_source"`
+	RainDelayUntil *time.Time            `json:"rain_delay_until"`
+	Sensor         app.SensorState       `json:"sensor"`
+	ControllerOn   bool                  `json:"controller_on"`
+	Timezone       string                `json:"timezone"`
+	Sun            map[string]time.Time  `json:"sun"`
 }
 
 func (s *Server) status() Status {

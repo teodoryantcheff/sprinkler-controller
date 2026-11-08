@@ -32,8 +32,8 @@ var version = "dev"
 
 // Config is the small hardware/port file; everything else lives in the DB.
 type Config struct {
-	Listen string `toml:"listen"`
-	DB     string `toml:"db"`
+	Listen  string `toml:"listen"`
+	DB      string `toml:"db"`
 	Outputs struct {
 		Driver   string `toml:"driver"`
 		Chip     string `toml:"chip"`

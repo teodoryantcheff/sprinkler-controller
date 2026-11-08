@@ -36,8 +36,8 @@ type Request struct {
 type itemState int
 
 const (
-	queued itemState = iota
-	waiting          // master valve opened, waiting for its on-delay
+	queued  itemState = iota
+	waiting           // master valve opened, waiting for its on-delay
 	running
 )
 

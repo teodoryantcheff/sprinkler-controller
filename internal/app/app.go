@@ -23,8 +23,8 @@ import (
 type App struct {
 	Store     *store.Store
 	Runner    *runner.Runner
-	Sensor    hw.Input      // nil when no sensor is configured in hardware
-	SimSensor *hw.SimInput  // set when the sensor is simulated
+	Sensor    hw.Input     // nil when no sensor is configured in hardware
+	SimSensor *hw.SimInput // set when the sensor is simulated
 	Clock     func() time.Time
 	Log       *slog.Logger
 	Started   time.Time
@@ -36,12 +36,12 @@ type App struct {
 	programs []core.Program
 	loc      *time.Location
 
-	lastPlan    time.Time
-	sensorRaw   bool
-	rawSince    time.Time
-	sensorWet   bool
-	sensorErr   string
-	rainWasOn   bool
+	lastPlan  time.Time
+	sensorRaw bool
+	rawSince  time.Time
+	sensorWet bool
+	sensorErr string
+	rainWasOn bool
 
 	subMu sync.Mutex
 	subs  map[chan struct{}]struct{}

@@ -123,11 +123,11 @@ type Event struct {
 
 // SensorConfig describes the rain / soil sensor input behaviour.
 type SensorConfig struct {
-	Enabled    bool   `json:"enabled"`
-	Kind       string `json:"kind"`     // rain | soil
-	Normally   string `json:"normally"` // open | closed
-	OnDelayS   int    `json:"on_delay_s"`
-	OffDelayS  int    `json:"off_delay_s"`
+	Enabled   bool   `json:"enabled"`
+	Kind      string `json:"kind"`     // rain | soil
+	Normally  string `json:"normally"` // open | closed
+	OnDelayS  int    `json:"on_delay_s"`
+	OffDelayS int    `json:"off_delay_s"`
 }
 
 // Settings is the typed view of the settings table.
