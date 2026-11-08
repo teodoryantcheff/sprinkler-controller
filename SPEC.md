@@ -93,7 +93,7 @@ Weather and the planner decide what should run; only the runner, through one dri
 | Database | SQLite via `modernc.org/sqlite` (pure Go, WAL mode) | No C toolchain for cross-builds; atomic writes survive power loss |
 | GPIO | Linux character device (`/dev/gpiochip0`) via `go-gpiocdev` | The sysfs GPIO interface is deprecated; works on all Pi models incl. Pi 5 |
 | Web UI | Svelte + TypeScript, built to static files, embedded with `go:embed` | Small bundle (<150 KB gz), no CDN, same UI on every target |
-| Live updates | Server-sent events (`/api/events`) | Simple, one-way, works through proxies |
+| Live updates | Server-sent events (`/api/stream`) | Simple, one-way, works through proxies |
 | Config | Everything in the DB, edited in the UI; a small TOML file only for hardware and port | Hardware must be set before the UI can run safely |
 | Service | systemd unit with `WatchdogSec`, runs as a dedicated user in the `gpio` group | No root needed with the cdev interface |
 

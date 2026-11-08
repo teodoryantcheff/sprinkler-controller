@@ -1,6 +1,6 @@
 # Sprinkler controller
 
-A replacement for OpenSprinkler 2.1.8 on `sprinklerpi`: one Go binary with the scheduler, valve driver, HTTP API, embedded web UI and SQLite. See `SPEC.md` for scope and rules, and `AGENTS.md` before touching the live Pi.
+A replacement for OpenSprinkler 2.1.8 on `sprinklerpi`: one Go binary with the scheduler, valve driver, HTTP API, embedded web UI and SQLite. See `SPEC.md` for scope and rules, and `AGENTS.md` before touching the live Pi. The HTTP API is documented in `docs/API.md`.
 
 Status: Phase 0 (import) and Phase 1 (core) are done. **Since 2026-11-08 it runs on `sprinklerpi` in place of OpenSprinkler**, on the real valve driver, at **http://192.168.1.20** and **https://192.168.1.20** (also `sprinklerpi.local`). OpenSprinkler and OSPy are stopped and disabled, not removed (see the rollback below).
 
@@ -234,7 +234,7 @@ internal/runner/    queue + state machine; the only package that touches outputs
 internal/hw/        sim, shiftreg (74HC595), gpiorelay drivers; sensor input
 internal/app/       minute planner loop, sensor debouncing, crash recovery, live updates
 internal/store/     SQLite schema, migrations, queries
-internal/api/       JSON API, SSE (/api/stream), auth, embedded UI
+internal/api/       JSON API (docs/API.md), SSE (/api/stream), auth, embedded UI
 internal/importos/  OpenSprinkler 2.1.8 nvm.dat / stns.dat / logs importer
 web/                Svelte 5 + TypeScript UI (≈43 KB gzipped)
 deploy/             dev.toml, sprinklerpi.toml (shadow mode), systemd unit
