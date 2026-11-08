@@ -241,8 +241,8 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) (any, error) {
 		"https": r.TLS != nil, "ca_available": len(s.caPEM) > 0}, nil
 }
 
-// minPassword is the shortest accepted password, in characters.
-const minPassword = 7
+// MinPassword is the shortest accepted password, in characters (also used by "sprinkler passwd").
+const MinPassword = 7
 
 type creds struct {
 	Name     string `json:"name"`
@@ -261,8 +261,8 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) (any, error) {
 	if err := decode(r, &c); err != nil {
 		return nil, err
 	}
-	if len([]rune(c.Password)) < minPassword {
-		return nil, bad("password must be at least %d characters", minPassword)
+	if len([]rune(c.Password)) < MinPassword {
+		return nil, bad("password must be at least %d characters", MinPassword)
 	}
 	if c.Name == "" {
 		c.Name = "admin"
@@ -314,8 +314,8 @@ func (s *Server) password(w http.ResponseWriter, r *http.Request) (any, error) {
 	if err != nil || !CheckPassword(u.PasswordHash, req.Current) {
 		return nil, httpError{http.StatusForbidden, "current password is wrong"}
 	}
-	if len([]rune(req.New)) < minPassword {
-		return nil, bad("password must be at least %d characters", minPassword)
+	if len([]rune(req.New)) < MinPassword {
+		return nil, bad("password must be at least %d characters", MinPassword)
 	}
 	h, err := HashPassword(req.New)
 	if err != nil {

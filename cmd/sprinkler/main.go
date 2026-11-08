@@ -90,6 +90,8 @@ func main() {
 		err = serve(os.Args[2:], log)
 	case "import":
 		err = importCmd(os.Args[2:], log)
+	case "passwd":
+		err = passwdCmd(os.Args[2:])
 	case "version":
 		fmt.Println(version)
 	default:
@@ -106,6 +108,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `usage:
   sprinkler serve  [-config sprinkler.toml] [-listen :8080] [-db sprinkler.db]
   sprinkler import -from DIR [-db sprinkler.db] [-tz Europe/Sofia] [-force] [-dry-run]
+  sprinkler passwd [-config sprinkler.toml | -db sprinkler.db] [-user admin] [-keep-sessions]
   sprinkler version
 `)
 }

@@ -196,7 +196,21 @@ OpenSprinkler comes back with its own data as you left it. Changes made in the n
 ```
 sprinkler serve  -config deploy/dev.toml       # or -listen / -db overrides
 sprinkler import -from DIR -db FILE [-force] [-dry-run] [-tz Europe/Sofia]
+sprinkler passwd [-config FILE | -db FILE] [-user admin] [-keep-sessions]
 sprinkler version
+```
+
+### Forgot the password
+
+Set a new one from the command line. It asks twice without echo, or reads one line from a pipe. It needs at least 7 characters and logs out every existing session (`-keep-sessions` to skip that). The running service picks it up at once, with no restart.
+
+```sh
+# on the Pi
+ssh pi@192.168.1.20
+sudo -u sprinkler sprinkler passwd -config /etc/sprinkler/sprinkler.toml
+
+# dev server on the laptop
+./dist/sprinkler passwd -db dev.db
 ```
 
 `import -dry-run` prints the zones, programs, run counts and warnings, so you can compare them against the OpenSprinkler UI (the Phase 0 gate).
