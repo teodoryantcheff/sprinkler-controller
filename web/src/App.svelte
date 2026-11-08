@@ -9,6 +9,7 @@
   import Zones from './pages/Zones.svelte'
   import History from './pages/History.svelte'
   import Settings from './pages/Settings.svelte'
+  import Icon from './lib/Icon.svelte'
 
   let password = $state('')
   let error = $state('')
@@ -48,15 +49,11 @@
   }
 
   const tabs = [
-    { path: '/', key: 'home', icon: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z' },
-    {
-      path: '/programs',
-      key: 'programs',
-      icon: 'M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM8 12h3v3H8z',
-    },
-    { path: '/zones', key: 'zones', icon: 'M12 3c-4 6-7 9-7 13a7 7 0 0 0 14 0c0-4-3-7-7-13z' },
-    { path: '/history', key: 'history', icon: 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5' },
-    { path: '/settings', key: 'settings', icon: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4' },
+    { path: '/', key: 'home', icon: 'home' },
+    { path: '/programs', key: 'programs', icon: 'calendar' },
+    { path: '/zones', key: 'zones', icon: 'droplet' },
+    { path: '/history', key: 'history', icon: 'history' },
+    { path: '/settings', key: 'settings', icon: 'settings' },
   ] as const
 
   const section = $derived('/' + (route.path.split('/')[1] || ''))
@@ -111,16 +108,8 @@
   <nav class="tabs" aria-label="Main">
     {#each tabs as tab}
       <a href={'#' + tab.path} aria-current={section === tab.path ? 'page' : undefined}>
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"><path d={tab.icon} /></svg
-        >
-        {t(tab.key)}
+        <span class="pill"><Icon name={tab.icon} size={28} /></span>
+        <span>{t(tab.key)}</span>
       </a>
     {/each}
   </nav>
