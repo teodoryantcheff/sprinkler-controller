@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -139,9 +141,11 @@ var (
 	ErrMasterZone    = errors.New("the master valve cannot be run as a zone")
 )
 
-// Enqueue adds runs. Scheduled runs go to the back of their lane; manual
-// runs go to the front (behind earlier manual runs) and pause a running
-// scheduled run in that lane until they finish. It returns the run ids.
+// Enqueue adds runs. Scheduled runs go to the back of their group's lane
+// and run one after another. Manual runs get a lane of their own per zone,
+// so several can run side by side up to MaxOpenZones; while one is queued
+// or running, scheduled runs of the same zone or group are paused. It
+// returns the run ids.
 func (r *Runner) Enqueue(now time.Time, reqs []Request) ([]int64, error) {
 	r.mu.Lock()
 	ids, err := r.enqueueLocked(now, reqs)
@@ -173,10 +177,8 @@ func (r *Runner) enqueueLocked(now time.Time, reqs []Request) ([]int64, error) {
 			return nil, ErrBadDuration
 		}
 		if q.Manual {
-			for _, it := range r.laneFor(z).items {
-				if it.manual && it.zone.ID == z.ID {
-					return nil, ErrAlreadyQueued
-				}
+			if l := r.lanes[manualLane(z)]; l != nil && len(l.items) > 0 {
+				return nil, ErrAlreadyQueued
 			}
 		}
 	}
@@ -205,35 +207,65 @@ func (r *Runner) enqueueLocked(now time.Time, reqs []Request) ([]int64, error) {
 			return ids, fmt.Errorf("store run: %w", err)
 		}
 		ids = append(ids, it.run.ID)
-		l := r.laneFor(z)
 		if q.Manual {
-			pos := 0
-			for pos < len(l.items) && l.items[pos].manual {
-				pos++
+			// Pause scheduled runs this manual run conflicts with.
+			for _, sl := range r.lanes {
+				for _, other := range sl.items {
+					if !other.manual && other.state != queued && conflicts(z, other.zone) {
+						r.suspend(other, now)
+					}
+				}
 			}
-			// Interrupt a running scheduled run at that position.
-			if pos < len(l.items) && l.items[pos].state != queued {
-				r.suspend(l.items[pos], now)
-			}
-			l.items = append(l.items, nil)
-			copy(l.items[pos+1:], l.items[pos:])
-			l.items[pos] = it
-			l.freeAt = time.Time{} // manual runs skip the station delay
+			l := r.lane(manualLane(z))
+			l.items = append(l.items, it)
 		} else {
+			l := r.laneFor(z)
 			l.items = append(l.items, it)
 		}
 	}
 	return ids, nil
 }
 
-func (r *Runner) laneFor(z core.Zone) *lane {
-	k := z.Lane()
+func (r *Runner) laneFor(z core.Zone) *lane { return r.lane(z.Lane()) }
+
+func (r *Runner) lane(k string) *lane {
 	l := r.lanes[k]
 	if l == nil {
 		l = &lane{}
 		r.lanes[k] = l
 	}
 	return l
+}
+
+// manualLane is the lane key for manual runs of a zone: one per zone, so
+// manual runs don't queue behind each other.
+func manualLane(z core.Zone) string { return "m" + strconv.FormatInt(z.ID, 10) }
+
+func isManualLane(k string) bool { return strings.HasPrefix(k, "m") }
+
+// conflicts reports whether a manual run of a pauses scheduled runs of b:
+// the same zone, or the same sequential group.
+func conflicts(a, b core.Zone) bool {
+	return a.ID == b.ID || (a.GroupID > 0 && a.GroupID == b.GroupID)
+}
+
+// blockedByManual reports whether a scheduled run must wait because a
+// manual run of the same zone or group is queued or running.
+func (r *Runner) blockedByManual(it *item) bool {
+	if it.manual {
+		return false
+	}
+	for k, l := range r.lanes {
+		if !isManualLane(k) {
+			continue
+		}
+		for _, m := range l.items {
+			if conflicts(m.zone, it.zone) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // suspend closes the current open segment of a running item and puts it
@@ -301,7 +333,15 @@ func (r *Runner) finish(l *lane, idx int, now time.Time, outcome string) {
 	}
 	l.items = append(l.items[:idx], l.items[idx+1:]...)
 	if wasOpen {
-		l.freeAt = now.Add(time.Duration(r.settings.StationDelayS) * time.Second)
+		free := now.Add(time.Duration(r.settings.StationDelayS) * time.Second)
+		if !it.manual {
+			l.freeAt = free // manual lanes don't wait: the delay is for valves taking turns in a group
+		} else {
+			// The paused scheduled runs of this zone's group also wait the delay.
+			if gl := r.lanes[it.zone.Lane()]; gl != nil && gl.freeAt.Before(free) {
+				gl.freeAt = free
+			}
+		}
 	}
 	r.log.Info("run finished", "zone", it.zone.Name, "outcome", outcome, "seconds", it.run.ActualSeconds)
 }
@@ -335,7 +375,7 @@ func (r *Runner) StopZone(now time.Time, zoneID int64) {
 			i++
 		}
 	}
-	r.applyLocked(now)
+	r.tickLocked(now)
 	r.mu.Unlock()
 	r.changed()
 }
@@ -353,7 +393,7 @@ func (r *Runner) StopRun(now time.Time, runID int64) bool {
 			}
 		}
 	}
-	r.applyLocked(now)
+	r.tickLocked(now) // a freed slot goes to the next waiting run at once
 	r.mu.Unlock()
 	r.changed()
 	return found
@@ -515,7 +555,7 @@ func (r *Runner) tickLocked(now time.Time) bool {
 			}
 			it := l.items[0]
 			if it.state == queued {
-				if now.Before(l.freeAt) {
+				if now.Before(l.freeAt) || r.blockedByManual(it) {
 					continue
 				}
 				if r.settings.MaxOpenZones > 0 && open >= r.settings.MaxOpenZones {
@@ -574,12 +614,20 @@ func (r *Runner) usesMaster(it *item) bool {
 	return r.settings.MasterZoneID > 0 && it.zone.UsesMaster
 }
 
+// laneKeys returns lanes in start priority: manual lanes first (they get
+// free slots before scheduled runs), then by name.
 func (r *Runner) laneKeys() []string {
 	keys := make([]string, 0, len(r.lanes))
 	for k := range r.lanes {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		mi, mj := isManualLane(keys[i]), isManualLane(keys[j])
+		if mi != mj {
+			return mi
+		}
+		return keys[i] < keys[j]
+	})
 	return keys
 }
 

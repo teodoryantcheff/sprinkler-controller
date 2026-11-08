@@ -332,3 +332,52 @@ func TestSnapshotEstimates(t *testing.T) {
 		t.Errorf("queued est start %v want %v", st.Queue[0].EstStart, want)
 	}
 }
+
+func TestManualRunsInParallelUpToMaxOpen(t *testing.T) {
+	g := newRig(t, nil) // A and B share group 1; max 2 open
+	ids := g.enqueue(Request{ZoneID: 1, Seconds: 60, Manual: true})
+	g.enqueue(Request{ZoneID: 2, Seconds: 30, Manual: true})
+	third := g.enqueue(Request{ZoneID: 3, Seconds: 30, Manual: true})
+	g.want("11000000") // same group, but manual: both open; C waits for a slot
+	st := g.r.Snapshot(g.now)
+	if len(st.Running) != 2 || len(st.Queue) != 1 || st.Queue[0].RunID != third[0] {
+		t.Fatalf("snapshot: %+v", st)
+	}
+	g.advance(30)
+	g.want("10100000") // B done, C takes the free slot
+	g.advance(30)
+	g.want("00000000")
+	if r := g.st.runs[ids[0]]; r.Outcome != core.OutcomeDone || r.ActualSeconds != 60 {
+		t.Errorf("%+v", r)
+	}
+	// Stopping one of two open runs starts the waiting one immediately.
+	a := g.enqueue(Request{ZoneID: 1, Seconds: 60, Manual: true})
+	g.enqueue(Request{ZoneID: 2, Seconds: 60, Manual: true}, Request{ZoneID: 4, Seconds: 60, Manual: true})
+	g.want("11000000")
+	g.r.StopRun(g.now, a[0])
+	g.want("01010000")
+}
+
+func TestManualPausesWholeGroup(t *testing.T) {
+	g := newRig(t, func(s *core.Settings, z []core.Zone) { s.MaxOpenZones = 4 })
+	sched := g.enqueue(Request{ZoneID: 1, Seconds: 100, ProgramID: pid(1)}, Request{ZoneID: 2, Seconds: 50, ProgramID: pid(1)})
+	g.enqueue(Request{ZoneID: 3, Seconds: 100, ProgramID: pid(2)}) // independent zone
+	g.advance(10)
+	g.want("10100000")
+	g.enqueue(Request{ZoneID: 2, Seconds: 20, Manual: true}) // manual B, same group as scheduled A
+	g.want("01100000")                                       // A paused; C (other lane) keeps running
+	g.advance(20)
+	g.want("00100000") // manual done: station delay before the group resumes
+	g.advance(10)
+	g.want("10100000") // A resumes with its remaining 90 s
+	g.advance(90)
+	if r := g.st.runs[sched[0]]; r.Outcome != core.OutcomeDone || r.ActualSeconds != 100 {
+		t.Errorf("scheduled A: %+v", r)
+	}
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 4, Seconds: 30, Manual: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.r.Enqueue(g.now, []Request{{ZoneID: 4, Seconds: 30, Manual: true}}); err != ErrAlreadyQueued {
+		t.Errorf("second manual run of the same zone: %v", err)
+	}
+}

@@ -160,7 +160,7 @@ Once a minute the planner turns programs into queued zone runs; the runner then 
 5. **Queueing.** Runs are appended to the queue of their zone's sequential group. Groups run in parallel; within a group, zones run one after another with the zone delay between.
 6. **Overlaps.** A program start while the same program is still queued is dropped (logged). A different program queues behind the current runs in the same group, as OpenSprinkler does.
 7. **Master valve.** Opens `on_delay` before the first zone that uses it and closes `off_delay` after the last one.
-8. **Manual runs** go to the front of their group and pause scheduled runs in that group until they finish. Stop all clears every queue.
+8. **Manual runs** (Run zone, zone tests) do not queue behind each other: each zone gets its own manual lane, so several can run at once up to the max-zones-open limit, and any beyond it wait for a free slot. While a manual run of a zone is queued or running, scheduled runs of that zone and of its sequential group are paused, and they resume after it (and the zone delay). Stop all clears every queue.
 9. **Limits.** Each zone run is cut at the zone's `max_minutes` (default 120) even if the program asks for more. *(Open: longest real runs are 35 min — consider a tighter default such as 60.)*
 
 All times are stored in UTC and planned in the configured time zone (`Europe/Sofia`).
