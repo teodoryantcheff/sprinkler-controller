@@ -126,3 +126,14 @@ func TestPasswordHash(t *testing.T) {
 	}
 }
 
+func TestCADownload(t *testing.T) {
+	srv, _ := newServer(t)
+	resp, err := http.Get(srv.URL + "/ca.crt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Errorf("no TLS configured: /ca.crt should be 404, got %d", resp.StatusCode)
+	}
+}

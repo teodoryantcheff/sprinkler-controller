@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"sprinkler/internal/importos"
 	"sprinkler/internal/runner"
 	"sprinkler/internal/store"
+	"sprinkler/internal/tlscert"
 )
 
 var version = "dev"
@@ -53,6 +56,13 @@ type Config struct {
 			Sim      bool   `toml:"sim"`
 		} `toml:"rain"`
 	} `toml:"inputs"`
+	TLS struct {
+		Listen string   `toml:"listen"` // e.g. ":443"; empty = no HTTPS
+		Hosts  []string `toml:"hosts"`  // names/IPs for the certificate; default: hostname(.local) + current IPs
+		Dir    string   `toml:"dir"`    // where the local CA and certificate live; default: <db dir>/tls
+		Cert   string   `toml:"cert"`   // optional: your own certificate instead of the local CA
+		Key    string   `toml:"key"`
+	} `toml:"tls"`
 }
 
 func defaultConfig() Config {
@@ -231,28 +241,97 @@ func serve(args []string, log *slog.Logger) (err error) {
 	go func() { runnerDone <- r.Run(ctx, time.Now) }()
 	go a.Loop(ctx)
 
-	srv := &http.Server{Addr: cfg.Listen, Handler: api.New(a, out.Count(), log), ReadHeaderTimeout: 10 * time.Second}
-	ln, err := net.Listen("tcp", cfg.Listen)
-	if err != nil {
+	handler := api.New(a, out.Count(), log)
+	var servers []*http.Server
+	fail := func(err error) error {
 		stop()
 		<-runnerDone
 		return err
 	}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	ln, err := net.Listen("tcp", cfg.Listen)
+	if err != nil {
+		return fail(err)
+	}
+	servers = append(servers, srv)
 	log.Info("listening", "addr", ln.Addr().String(), "db", cfg.DB, "version", version)
-	sdNotify("READY=1")
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http", "err", err)
 			stop()
 		}
 	}()
+	if cfg.TLS.Listen != "" {
+		tcfg, caPEM, hosts, err := tlsConfig(cfg)
+		if err != nil {
+			return fail(fmt.Errorf("tls: %w", err))
+		}
+		handler.SetCA(caPEM)
+		tsrv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second, TLSConfig: tcfg}
+		tln, err := net.Listen("tcp", cfg.TLS.Listen)
+		if err != nil {
+			return fail(err)
+		}
+		servers = append(servers, tsrv)
+		log.Info("listening https", "addr", tln.Addr().String(), "hosts", hosts)
+		go func() {
+			if err := tsrv.ServeTLS(tln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("https", "err", err)
+				stop()
+			}
+		}()
+	}
+	sdNotify("READY=1")
 	<-ctx.Done()
 	log.Info("shutting down: all valves off")
 	sdNotify("STOPPING=1")
 	shCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_ = srv.Shutdown(shCtx)
+	for _, s := range servers {
+		_ = s.Shutdown(shCtx)
+	}
 	return <-runnerDone
+}
+
+// tlsConfig loads the configured certificate, or the local CA's.
+func tlsConfig(cfg Config) (*tls.Config, []byte, []string, error) {
+	if cfg.TLS.Cert != "" {
+		c, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return &tls.Config{Certificates: []tls.Certificate{c}, MinVersion: tls.VersionTLS12}, nil, nil, nil
+	}
+	dir := cfg.TLS.Dir
+	if dir == "" {
+		dir = filepath.Join(filepath.Dir(cfg.DB), "tls")
+	}
+	hosts := cfg.TLS.Hosts
+	if len(hosts) == 0 {
+		hosts = defaultHosts()
+	}
+	b, err := tlscert.Ensure(dir, hosts, time.Now())
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &tls.Config{Certificates: []tls.Certificate{b.Cert}, MinVersion: tls.VersionTLS12}, b.CAPEM, b.Hosts, nil
+}
+
+// defaultHosts: the hostname, hostname.local (mDNS), localhost and every
+// non-link-local address the machine has now.
+func defaultHosts() []string {
+	hosts := []string{"localhost", "127.0.0.1"}
+	if h, err := os.Hostname(); err == nil && h != "" {
+		hosts = append(hosts, h, h+".local")
+	}
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && !ipn.IP.IsLoopback() && !ipn.IP.IsLinkLocalUnicast() {
+				hosts = append(hosts, ipn.IP.String())
+			}
+		}
+	}
+	return hosts
 }
 
 // sdNotify sends a message to systemd if NOTIFY_SOCKET is set.
