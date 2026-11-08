@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -116,6 +117,31 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+// OpenReadOnly opens an existing database without migrating or writing,
+// e.g. to inspect the live database with a newer binary.
+func OpenReadOnly(path string) (*Store, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return &Store{DB: db}, nil
+}
+
+// ActiveRuns counts runs that are queued or watering now.
+func (s *Store) ActiveRuns() (int, error) {
+	var n int
+	err := s.DB.QueryRow("SELECT COUNT(*) FROM runs WHERE outcome = ''").Scan(&n)
+	return n, err
 }
 
 // Close closes the database.

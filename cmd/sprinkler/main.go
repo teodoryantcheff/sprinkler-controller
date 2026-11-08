@@ -3,6 +3,7 @@
 //
 //	sprinkler serve  -config sprinkler.toml
 //	sprinkler import -from ./os-copy -db sprinkler.db [-force]
+//	sprinkler busy   -config sprinkler.toml   (exit 3 while watering)
 package main
 
 import (
@@ -116,6 +117,10 @@ func main() {
 		err = importCmd(os.Args[2:], log)
 	case "passwd":
 		err = passwdCmd(os.Args[2:])
+	case "busy":
+		if err = busyCmd(os.Args[2:], os.Stdout); errors.Is(err, errBusy) {
+			os.Exit(3)
+		}
 	case "version":
 		fmt.Println(version)
 	default:
@@ -133,6 +138,7 @@ func usage() {
   sprinkler serve  [-config sprinkler.toml] [-listen :8080] [-db sprinkler.db]
   sprinkler import -from DIR [-db sprinkler.db] [-tz Europe/Sofia] [-force] [-dry-run]
   sprinkler passwd [-config sprinkler.toml | -db sprinkler.db] [-user admin] [-keep-sessions]
+  sprinkler busy   [-config sprinkler.toml | -db sprinkler.db]   exit 3 if watering or queued
   sprinkler version
 `)
 }
