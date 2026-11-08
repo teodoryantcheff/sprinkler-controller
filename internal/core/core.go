@@ -3,6 +3,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -165,6 +166,54 @@ func DefaultSettings() Settings {
 		Language:         "en",
 		ControllerOn:     true,
 	}
+}
+
+// Validate checks a zone against the number of outputs the driver has.
+func (z *Zone) Validate(outputs int) error {
+	switch {
+	case strings.TrimSpace(z.Name) == "":
+		return errors.New("name is required")
+	case z.OutputIndex < 0 || z.OutputIndex >= outputs:
+		return fmt.Errorf("output must be 1–%d", outputs)
+	case z.MaxMinutes < 1 || z.MaxMinutes > 720:
+		return errors.New("max minutes must be 1–720")
+	case z.GroupID < 0 || z.GroupID > 99:
+		return errors.New("group must be 0–99")
+	}
+	return nil
+}
+
+// Validate checks every settings field's range. It does not check that
+// MasterZoneID exists; callers that know the zones do.
+func (s *Settings) Validate() error {
+	if _, err := time.LoadLocation(s.Timezone); err != nil || s.Timezone == "" {
+		return fmt.Errorf("unknown time zone %q", s.Timezone)
+	}
+	switch {
+	case s.Lat < -90 || s.Lat > 90 || s.Lon < -180 || s.Lon > 180:
+		return errors.New("latitude/longitude out of range")
+	case s.WateringLevelPct < 0 || s.WateringLevelPct > 250:
+		return errors.New("watering level must be 0–250%")
+	case s.StationDelayS < 0 || s.StationDelayS > 600:
+		return errors.New("zone delay must be 0–600 s")
+	case s.MasterOnDelayS < 0 || s.MasterOnDelayS > 600 || s.MasterOffDelayS < 0 || s.MasterOffDelayS > 600:
+		return errors.New("master delays must be 0–600 s")
+	case s.MaxOpenZones < 1 || s.MaxOpenZones > 16:
+		return errors.New("max open zones must be 1–16")
+	case s.DailyCapMinutes < 1 || s.DailyCapMinutes > 1440:
+		return errors.New("daily cap must be 1–1440 min")
+	case s.Sensor.Normally != "open" && s.Sensor.Normally != "closed":
+		return errors.New("sensor must be normally open or closed")
+	case s.Sensor.Kind != "rain" && s.Sensor.Kind != "soil":
+		return errors.New("sensor kind must be rain or soil")
+	case s.Sensor.OnDelayS < 0 || s.Sensor.OffDelayS < 0 || s.Sensor.OnDelayS > 86400 || s.Sensor.OffDelayS > 86400:
+		return errors.New("sensor delays must be 0–86400 s")
+	case s.Language != "en" && s.Language != "bg":
+		return errors.New("language must be en or bg")
+	case s.MasterZoneID < 0:
+		return errors.New("bad master zone")
+	}
+	return nil
 }
 
 // Location loads the configured time zone.
