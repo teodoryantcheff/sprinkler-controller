@@ -2,13 +2,15 @@
 # OpenSprinkler 2.1.8 install: shift register on BCM 22/27/4/17, one rain
 # sensor (normally open) on BCM 14.
 #
-# Until Cutover, run with driver = "sim" (Shadow mode) — never "shiftreg"
-# while OpenSprinkler or OSPy is still running.
-listen = ":8090"
+# This is the config installed on the Pi at /etc/sprinkler/sprinkler.toml
+# (Cutover 2026-11-08). For a shadow install alongside OpenSprinkler use
+# driver = "sim" and sim = true instead; never "shiftreg" while
+# OpenSprinkler or OSPy is running.
+listen = ":80"
 db     = "/var/lib/sprinkler/sprinkler.db"
 
 [outputs]
-driver = "sim"        # shiftreg at Cutover
+driver = "shiftreg"   # Cutover 2026-11-08 (was "sim" for Shadow)
 chip   = "gpiochip0"
 count  = 8
 
@@ -19,6 +21,12 @@ clock = 4
 oe    = 17
 
 [inputs.rain]
-sim      = true       # pin = 14 at Cutover (OpenSprinkler holds it until then)
+sim      = false      # real sensor on GPIO 14 since Cutover
 pin      = 14
 normally = "open"
+
+# HTTPS with a local CA kept in /var/lib/sprinkler/tls. The certificate
+# covers the hostname, hostname.local and the Pi's current IP addresses;
+# phones trust it after installing http://192.168.1.20/ca.crt once.
+[tls]
+listen = ":443"
