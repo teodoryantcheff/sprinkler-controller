@@ -19,6 +19,19 @@ Weather-based adjustment from several providers is planned (Phase 2 in [`SPEC.md
 
 *Target design. The weather module is not built yet.*
 
+## Hardware
+
+The reference install is a Raspberry Pi 1 with an OpenSprinkler-style 74HC595 valve board and one rain sensor. Names are BCM GPIO numbers, as `sprinkler.toml` uses them; bracketed numbers are header pins:
+
+```
+  74HC595 clock ---- GPIO4   (7) (8)   GPIO14 ---- rain sensor, to GND
+  74HC595 OE ------- GPIO17 (11) (12)  GPIO18
+  74HC595 data ----- GPIO27 (13) (14)  GND
+  74HC595 latch ---- GPIO22 (15) (16)  GPIO23
+```
+
+Other pins and boards can be set in the config. Plain GPIO relay boards are supported too. The full header drawing is in [docs/raspberry-pi.md](docs/raspberry-pi.md#pin-header).
+
 ## Quick start
 
 Needs Go 1.26+ and Node (for the UI).

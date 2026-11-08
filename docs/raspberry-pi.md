@@ -4,6 +4,32 @@ This runbook parks OpenSprinkler and OSPy without deleting anything, and runs th
 
 On 2026-11-08 this was carried out at the user's request without the 14-day shadow run. The service was installed directly with the real-valve config from step 4, then the old controllers were stashed (step 3). The zone tests in step 4 and the rollback test were done on 2026-11-09. For later updates, see [Updating](#updating).
 
+## Pin header
+
+What is wired to the Pi's GPIO header. Pin numbers in brackets are physical header pins; names are BCM GPIO numbers, which are what `sprinkler.toml` uses. Pins 1-26 are the same on the Pi 1's 26-pin header and on 40-pin boards. Pin 1 has the square solder pad.
+
+```
+                             +-----------+
+                       3V3   |  1     2  |  5V
+                     GPIO2   |  3     4  |  5V
+                     GPIO3   |  5     6  |  GND
+  74HC595 clock ---- GPIO4   |  7     8  |  GPIO14 ---- rain sensor (other wire to GND)
+                       GND   |  9    10  |  GPIO15      RF transmitter, unused
+  74HC595 OE ------- GPIO17  | 11    12  |  GPIO18
+  74HC595 data ----- GPIO27  | 13    14  |  GND
+  74HC595 latch ---- GPIO22  | 15    16  |  GPIO23      OpenSprinkler button 1, unused
+                       3V3   | 17    18  |  GPIO24
+                    GPIO10   | 19    20  |  GND
+                     GPIO9   | 21    22  |  GPIO25
+                    GPIO11   | 23    24  |  GPIO8
+                       GND   | 25    26  |  GPIO7
+                             +-----------+
+```
+
+- **Valves:** the 74HC595 shift register drives 8 outputs (zones 1-5 and 7 in use). OE is active low: while GPIO17 is high, every output is off whatever the register holds. The driver keeps it high until the first all-off write.
+- **Rain sensor:** normally open, between GPIO14 and GND, with the internal pull-up. It reads 1 when dry and 0 when the switch closes. GPIO14 is also the UART TX pin, so the serial console must stay off.
+- **No master valve** and no flow sensor.
+
 ## 0. Before you start
 
 - A full SD image backup exists: `/home/teo/backups/sprinklerpi-2026-11-07.img.zst`. Take a fresh one if OpenSprinkler's programs have changed since then.
