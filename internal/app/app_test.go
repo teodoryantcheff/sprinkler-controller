@@ -162,3 +162,46 @@ func TestUpcoming(t *testing.T) {
 		t.Errorf("%v %v", up[0].EstStart, up[1].EstStart)
 	}
 }
+
+func TestClockWaitsForSync(t *testing.T) {
+	a, sim, st := setup(t)
+	synced := false
+	a.ClockSynced = func() bool { return synced }
+	now := time.Date(2026, 11, 7, 5, 59, 50, 0, sofia)
+	for range 20 { // 05:59:50 .. 06:00:09, clock not trusted
+		a.PlanTick(now)
+		a.Runner.Tick(now)
+		now = now.Add(time.Second)
+	}
+	if !a.ClockWaiting() {
+		t.Fatal("should report waiting for clock sync")
+	}
+	if open, _ := st.OpenRuns(); len(open) != 0 || sim.States()[0] {
+		t.Fatalf("nothing may start before sync, got %d open runs", len(open))
+	}
+	// Sync arrives two minutes after the start: the missed start is skipped.
+	synced = true
+	a.PlanTick(time.Date(2026, 11, 7, 6, 2, 0, 0, sofia))
+	if a.ClockWaiting() {
+		t.Fatal("waiting flag should clear after sync")
+	}
+	if open, _ := st.OpenRuns(); len(open) != 0 {
+		t.Fatalf("missed start must not run late, got %d open runs", len(open))
+	}
+	// Losing sync later does not hold programs again.
+	synced = false
+	next := time.Date(2026, 11, 8, 6, 0, 0, 0, sofia)
+	a.lastPlan = next.Add(-time.Second)
+	a.PlanTick(next)
+	if open, _ := st.OpenRuns(); len(open) != 2 {
+		t.Fatalf("next day's start should queue, got %d open runs", len(open))
+	}
+	evs, _ := st.Events(next.Add(time.Hour), 50)
+	kinds := map[string]int{}
+	for _, e := range evs {
+		kinds[e.Kind]++
+	}
+	if kinds["clock_unsynced"] != 1 || kinds["clock_synced"] != 1 {
+		t.Fatalf("want one clock_unsynced and one clock_synced event, got %v", kinds)
+	}
+}

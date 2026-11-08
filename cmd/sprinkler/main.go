@@ -26,6 +26,7 @@ import (
 	"sprinkler/internal/importos"
 	"sprinkler/internal/runner"
 	"sprinkler/internal/store"
+	"sprinkler/internal/sysclock"
 	"sprinkler/internal/tlscert"
 
 	"github.com/BurntSushi/toml"
@@ -56,6 +57,11 @@ type Config struct {
 			Sim      bool   `toml:"sim"`
 		} `toml:"rain"`
 	} `toml:"inputs"`
+	Clock struct {
+		// WaitSync holds scheduled programs until NTP has set the clock
+		// once (default true; the Pi has no hardware clock).
+		WaitSync bool `toml:"wait_sync"`
+	} `toml:"clock"`
 	TLS struct {
 		Listen string   `toml:"listen"` // e.g. ":443"; empty = no HTTPS
 		Hosts  []string `toml:"hosts"`  // names/IPs for the certificate; default: hostname(.local) + current IPs
@@ -75,6 +81,7 @@ func defaultConfig() Config {
 	c.Outputs.ShiftReg.Latch, c.Outputs.ShiftReg.Data, c.Outputs.ShiftReg.Clock, c.Outputs.ShiftReg.OE = 22, 27, 4, 17
 	c.Inputs.Rain.Pin = -1
 	c.Inputs.Rain.Normally = "open"
+	c.Clock.WaitSync = true
 	return c
 }
 
@@ -221,6 +228,9 @@ func serve(args []string, log *slog.Logger) (err error) {
 		return err
 	}
 	a.Version = version
+	if cfg.Clock.WaitSync {
+		a.ClockSynced = sysclock.Synced
+	}
 	switch {
 	case cfg.Inputs.Rain.Sim || (cfg.Outputs.Driver == "sim" && cfg.Inputs.Rain.Pin < 0):
 		a.SimSensor = &hw.SimInput{}

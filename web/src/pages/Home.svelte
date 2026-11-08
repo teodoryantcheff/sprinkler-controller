@@ -102,6 +102,7 @@
       </div>
     </div>
   {/if}
+  {#if s.clock_waiting}<div class="banner warn" role="alert"><Icon name="alert" />{t('clock_waiting')}</div>{/if}
   {#if !s.controller_on}<div class="banner warn"><Icon name="alert" />{t('controller_off')}</div>{/if}
   {#if s.runner.driver === 'sim'}<div class="banner info"><Icon name="chip" />{t('driver_sim')}</div>{/if}
 

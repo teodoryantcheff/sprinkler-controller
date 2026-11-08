@@ -95,6 +95,7 @@ export interface Status {
   rain_delay_until: string | null
   sensor: { enabled: boolean; wet: boolean; raw: boolean; error?: string; sim: boolean; kind: string }
   controller_on: boolean
+  clock_waiting: boolean
   timezone: string
   sun?: { sunrise: string; sunset: string }
 }

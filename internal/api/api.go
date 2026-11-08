@@ -396,6 +396,7 @@ type Status struct {
 	RainDelayUntil *time.Time            `json:"rain_delay_until"`
 	Sensor         app.SensorState       `json:"sensor"`
 	ControllerOn   bool                  `json:"controller_on"`
+	ClockWaiting   bool                  `json:"clock_waiting"`
 	Timezone       string                `json:"timezone"`
 	Sun            map[string]time.Time  `json:"sun"`
 }
@@ -411,6 +412,7 @@ func (s *Server) status() Status {
 		WateringSource: "manual",
 		Sensor:         s.app.SensorState(),
 		ControllerOn:   st.ControllerOn,
+		ClockWaiting:   s.app.ClockWaiting(),
 		Timezone:       st.Timezone,
 	}
 	if st.RainDelayUntil != nil && now.Before(*st.RainDelayUntil) {
