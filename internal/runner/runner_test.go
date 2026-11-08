@@ -402,3 +402,64 @@ func TestManualPausesWholeGroup(t *testing.T) {
 		t.Errorf("second manual run of the same zone: %v", err)
 	}
 }
+
+// A late tick on the real clock (slow SD card) is not a clock step: the
+// valve was open the whole time, so it counts as watered.
+func TestLateTickOnMonotonicClock(t *testing.T) {
+	g := newRig(t, nil)
+	g.now = time.Now() // carries a monotonic reading, like production
+	id := g.enqueue(Request{ZoneID: 3, Seconds: 60})[0]
+	g.advance(10)
+	g.now = g.now.Add(30 * time.Second)
+	g.r.Tick(g.now)
+	g.want("00100000")
+	g.advance(20)
+	g.want("00000000")
+	if r := g.st.runs[id]; r.Outcome != core.OutcomeDone || r.ActualSeconds < 59 || r.ActualSeconds > 61 {
+		t.Errorf("%+v", r)
+	}
+	for _, e := range g.st.events {
+		if e == "clock_jump" {
+			t.Error("late tick logged as clock_jump")
+		}
+	}
+}
+
+type panicStore struct {
+	*memStore
+	armed bool
+}
+
+func (p *panicStore) UpdateRun(r *core.Run) error {
+	if p.armed {
+		p.armed = false
+		panic("store exploded")
+	}
+	return p.memStore.UpdateRun(r)
+}
+
+// A panic inside a runner call that the caller recovers (net/http does)
+// must not leave the runner locked.
+func TestPanicReleasesLock(t *testing.T) {
+	g := newRig(t, nil)
+	g.r.store = &panicStore{memStore: g.st, armed: true}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected a panic")
+			}
+		}()
+		_, _ = g.r.Enqueue(g.now, []Request{{ZoneID: 3, Seconds: 60}})
+	}()
+	done := make(chan struct{})
+	go func() {
+		g.advance(1)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner still locked after a recovered panic")
+	}
+	g.want("00100000")
+}

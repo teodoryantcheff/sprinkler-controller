@@ -243,3 +243,13 @@ func TestClockWaitsForSync(t *testing.T) {
 		t.Fatalf("want one clock_unsynced and one clock_synced event, got %v", kinds)
 	}
 }
+
+// The planner compares wall times: a monotonic reading kept in lastPlan
+// would make the next comparison ignore the wall clock and hide a step.
+func TestPlanUsesWallClock(t *testing.T) {
+	a, _, _ := setup(t)
+	a.PlanTick(time.Now())
+	if a.lastPlan.IsZero() || a.lastPlan != a.lastPlan.Round(0) {
+		t.Fatalf("lastPlan %v carries a monotonic reading", a.lastPlan)
+	}
+}

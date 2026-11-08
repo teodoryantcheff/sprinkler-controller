@@ -251,3 +251,28 @@ func TestSdNotifyAndWatchdog(t *testing.T) {
 		t.Fatalf("watchdog not rate-limited, got %q", got)
 	}
 }
+
+type countOff struct{ n int }
+
+func (c *countOff) AllOff() error { c.n++; return nil }
+
+func TestAllOffOnPanic(t *testing.T) {
+	out := &countOff{}
+	var got any
+	func() {
+		defer func() { got = recover() }()
+		func() {
+			defer allOffOnPanic(out)
+			panic("boom")
+		}()
+	}()
+	if got != "boom" || out.n != 1 {
+		t.Fatalf("panic %v, all-off calls %d; want boom, 1", got, out.n)
+	}
+	func() {
+		defer allOffOnPanic(out)
+	}()
+	if out.n != 1 {
+		t.Fatalf("all-off without a panic")
+	}
+}

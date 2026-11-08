@@ -190,22 +190,28 @@ func (a *App) PlanTick(now time.Time) {
 		return // lastPlan stays zero: planning starts fresh after sync
 	}
 	settings, zones, programs, loc := a.Snapshot()
+	// Plan on the wall clock. Times from time.Now carry a monotonic
+	// reading, and comparing two of them ignores the wall clock, which
+	// would hide an NTP or manual step; the planned starts are wall times.
+	// The runner still gets now as is, to time valves on the monotonic
+	// clock.
+	wall := now.Round(0)
 	from := a.lastPlan
 	switch {
 	case from.IsZero():
 		// Start-up: only starts in the current minute (a restart inside
 		// the start minute must still water; earlier ones are missed).
-		from = now.Truncate(time.Minute).Add(-time.Nanosecond)
-	case now.Sub(from) > 5*time.Minute || from.Sub(now) > 5*time.Second:
-		a.Log.Warn("clock jump, re-planning from now", "from", from, "to", now)
-		_ = a.Store.AddEvent(now, "clock_jump", map[string]any{"from": from.UTC(), "to": now.UTC()})
-		from = now.Truncate(time.Minute).Add(-time.Nanosecond)
-	case !now.After(from):
+		from = wall.Truncate(time.Minute).Add(-time.Nanosecond)
+	case wall.Sub(from) > 5*time.Minute || from.Sub(wall) > 5*time.Second:
+		a.Log.Warn("clock jump, re-planning from now", "from", from, "to", wall)
+		_ = a.Store.AddEvent(now, "clock_jump", map[string]any{"from": from.UTC(), "to": wall.UTC()})
+		from = wall.Truncate(time.Minute).Add(-time.Nanosecond)
+	case !wall.After(from):
 		return
 	}
-	a.lastPlan = now
+	a.lastPlan = wall
 	env := schedule.Env{Loc: loc, Lat: settings.Lat, Lon: settings.Lon}
-	due := schedule.Due(programs, env, from, now)
+	due := schedule.Due(programs, env, from, wall)
 	if len(due) == 0 {
 		return
 	}

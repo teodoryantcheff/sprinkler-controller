@@ -211,12 +211,7 @@ func serve(parent context.Context, args []string, log *slog.Logger) (err error) 
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if p := recover(); p != nil {
-			_ = out.AllOff()
-			panic(p)
-		}
-	}()
+	defer allOffOnPanic(out)
 	defer func() {
 		if cerr := out.Close(); cerr != nil {
 			log.Error("closing outputs", "err", cerr)
@@ -273,7 +268,10 @@ func serve(parent context.Context, args []string, log *slog.Logger) (err error) 
 	r.Alive = watchdog(log)
 	runnerDone := make(chan error, 1)
 	go func() { runnerDone <- r.Run(ctx, time.Now) }()
-	go a.Loop(ctx)
+	go func() {
+		defer allOffOnPanic(out)
+		a.Loop(ctx)
+	}()
 
 	handler := api.New(a, out.Count(), log)
 	var servers []*http.Server
@@ -398,6 +396,18 @@ func sdNotify(msg string) {
 	}
 	defer c.Close()
 	_, _ = c.Write([]byte(msg))
+}
+
+// allOffOnPanic switches every output off if the goroutine that deferred
+// it panics, then lets the panic go on: the process dies and systemd
+// restarts it, all-off. Defer it first thing in every long-lived
+// goroutine: a panic runs only its own goroutine's defers, and the
+// 74HC595 keeps its outputs latched after the process exits.
+func allOffOnPanic(out interface{ AllOff() error }) {
+	if p := recover(); p != nil {
+		_ = out.AllOff()
+		panic(p)
+	}
 }
 
 // watchdog returns a callback for the runner loop that pings systemd's

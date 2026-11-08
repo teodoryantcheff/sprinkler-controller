@@ -156,12 +156,14 @@ var (
 // or running, scheduled runs of the same zone or group are paused. It
 // returns the run ids.
 func (r *Runner) Enqueue(now time.Time, reqs []Request) ([]int64, error) {
-	r.mu.Lock()
-	ids, err := r.enqueueLocked(now, reqs)
-	if len(ids) > 0 {
-		r.tickLocked(now) // open valves now, not on the next tick
-	}
-	r.mu.Unlock()
+	var ids []int64
+	var err error
+	r.locked(func() {
+		ids, err = r.enqueueLocked(now, reqs)
+		if len(ids) > 0 {
+			r.tickLocked(now) // open valves now, not on the next tick
+		}
+	})
 	r.changed()
 	return ids, err
 }
@@ -357,53 +359,53 @@ func (r *Runner) finish(l *lane, idx int, now time.Time, outcome string) {
 
 // StopAll clears every queue and closes all valves.
 func (r *Runner) StopAll(now time.Time) {
-	r.mu.Lock()
-	for _, l := range r.lanes {
-		for len(l.items) > 0 {
-			r.finish(l, 0, now, core.OutcomeStopped)
+	r.locked(func() {
+		for _, l := range r.lanes {
+			for len(l.items) > 0 {
+				r.finish(l, 0, now, core.OutcomeStopped)
+			}
+			l.freeAt = time.Time{}
 		}
-		l.freeAt = time.Time{}
-	}
-	r.masterOn = false // stop all closes the master at once, no off-delay
-	r.masterOffAt = time.Time{}
-	r.applyLocked(now)
-	r.mu.Unlock()
+		r.masterOn = false // stop all closes the master at once, no off-delay
+		r.masterOffAt = time.Time{}
+		r.applyLocked(now)
+	})
 	_ = r.store.AddEvent(now, "stop_all", nil)
 	r.changed()
 }
 
 // StopZone stops and dequeues every run of one zone.
 func (r *Runner) StopZone(now time.Time, zoneID int64) {
-	r.mu.Lock()
-	for _, l := range r.lanes {
-		for i := 0; i < len(l.items); {
-			if l.items[i].zone.ID == zoneID {
-				r.finish(l, i, now, core.OutcomeStopped)
-				continue
+	r.locked(func() {
+		for _, l := range r.lanes {
+			for i := 0; i < len(l.items); {
+				if l.items[i].zone.ID == zoneID {
+					r.finish(l, i, now, core.OutcomeStopped)
+					continue
+				}
+				i++
 			}
-			i++
 		}
-	}
-	r.tickLocked(now)
-	r.mu.Unlock()
+		r.tickLocked(now)
+	})
 	r.changed()
 }
 
 // StopRun stops or dequeues one run by id.
 func (r *Runner) StopRun(now time.Time, runID int64) bool {
-	r.mu.Lock()
 	found := false
-	for _, l := range r.lanes {
-		for i, it := range l.items {
-			if it.run.ID == runID {
-				r.finish(l, i, now, core.OutcomeStopped)
-				found = true
-				break
+	r.locked(func() {
+		for _, l := range r.lanes {
+			for i, it := range l.items {
+				if it.run.ID == runID {
+					r.finish(l, i, now, core.OutcomeStopped)
+					found = true
+					break
+				}
 			}
 		}
-	}
-	r.tickLocked(now) // a freed slot goes to the next waiting run at once
-	r.mu.Unlock()
+		r.tickLocked(now) // a freed slot goes to the next waiting run at once
+	})
 	r.changed()
 	return found
 }
@@ -411,23 +413,23 @@ func (r *Runner) StopRun(now time.Time, runID int64) bool {
 // Block stops scheduled (not manual) runs of zones that do not ignore the
 // given condition, e.g. when the rain sensor trips mid-cycle.
 func (r *Runner) Block(now time.Time, outcome string) int {
-	r.mu.Lock()
 	n := 0
-	for _, l := range r.lanes {
-		for i := 0; i < len(l.items); {
-			it := l.items[i]
-			z := r.zones[it.zone.ID]
-			ignore := (outcome == core.OutcomeSkippedRain && z.IgnoreRain) || (outcome == core.OutcomeSkippedSensor && z.IgnoreSensor)
-			if !it.manual && !ignore {
-				r.finish(l, i, now, outcome)
-				n++
-				continue
+	r.locked(func() {
+		for _, l := range r.lanes {
+			for i := 0; i < len(l.items); {
+				it := l.items[i]
+				z := r.zones[it.zone.ID]
+				ignore := (outcome == core.OutcomeSkippedRain && z.IgnoreRain) || (outcome == core.OutcomeSkippedSensor && z.IgnoreSensor)
+				if !it.manual && !ignore {
+					r.finish(l, i, now, outcome)
+					n++
+					continue
+				}
+				i++
 			}
-			i++
 		}
-	}
-	r.applyLocked(now)
-	r.mu.Unlock()
+		r.applyLocked(now)
+	})
 	if n > 0 {
 		r.changed()
 	}
@@ -436,8 +438,10 @@ func (r *Runner) Block(now time.Time, outcome string) int {
 
 // Pause closes all valves and freezes the queue; Resume continues it.
 func (r *Runner) Pause(now time.Time) {
-	r.mu.Lock()
-	if !r.paused {
+	r.locked(func() {
+		if r.paused {
+			return
+		}
 		r.paused = true
 		for _, l := range r.lanes {
 			for _, it := range l.items {
@@ -447,36 +451,32 @@ func (r *Runner) Pause(now time.Time) {
 			}
 		}
 		r.applyLocked(now)
-	}
-	r.mu.Unlock()
+	})
 	_ = r.store.AddEvent(now, "pause", nil)
 	r.changed()
 }
 
 // Resume continues a paused queue.
 func (r *Runner) Resume(now time.Time) {
-	r.mu.Lock()
-	r.paused = false
-	r.tickLocked(now)
-	r.mu.Unlock()
+	r.locked(func() {
+		r.paused = false
+		r.tickLocked(now)
+	})
 	_ = r.store.AddEvent(now, "resume", nil)
 	r.changed()
 }
 
 // ClearFault acknowledges an output failure so runs can be queued again.
 func (r *Runner) ClearFault(now time.Time) {
-	r.mu.Lock()
-	r.fault = ""
-	r.mu.Unlock()
+	r.locked(func() { r.fault = "" })
 	_ = r.store.AddEvent(now, "fault_cleared", nil)
 	r.changed()
 }
 
 // Tick advances the state machine to now and writes the outputs.
 func (r *Runner) Tick(now time.Time) {
-	r.mu.Lock()
-	changed := r.tickLocked(now)
-	r.mu.Unlock()
+	var changed bool
+	r.locked(func() { changed = r.tickLocked(now) })
 	if changed {
 		r.changed()
 	}
@@ -485,38 +485,77 @@ func (r *Runner) Tick(now time.Time) {
 	}
 }
 
+// maxStep is how far the wall clock may move apart from real time between
+// two ticks before it counts as a clock step.
+const maxStep = 5 * time.Second
+
+// hasMonotonic reports whether t carries a monotonic clock reading (times
+// from time.Now do; fake clocks and parsed times don't).
+func hasMonotonic(t time.Time) bool { return t != t.Round(0) }
+
 func (r *Runner) tickLocked(now time.Time) bool {
 	before := r.signature()
-	// Clock jumped (NTP sync, manual change): close the open segments at
-	// the last known time and continue from now, so a jump neither ends a
-	// run early nor counts water that was not given.
-	if !r.lastNow.IsZero() && (now.Before(r.lastNow) || now.Sub(r.lastNow) > 5*time.Second) {
-		for _, l := range r.lanes {
-			for _, it := range l.items {
-				if it.state == running {
-					seg := int(r.lastNow.Sub(it.openedAt)/time.Second) + 1
-					if seg < 0 {
-						seg = 0
-					}
-					it.run.ActualSeconds += seg
-					r.dayUsed[it.zone.ID] += seg
-					it.openedAt = now
-				}
-				if it.state == waiting {
-					it.waitTill = now
-				}
-			}
-			if !l.freeAt.IsZero() {
-				l.freeAt = now
-			}
-		}
-		_ = r.store.AddEvent(now, "clock_jump", map[string]any{"from": r.lastNow.UTC(), "to": now.UTC()})
-	}
+	r.clockStep(now)
 	r.lastNow = now
 	if d := now.In(r.loc).Format("2006-01-02"); d != r.day {
 		r.day = d
 		r.dayUsed = map[int64]int{}
 	}
+	return r.advanceLocked(now, before)
+}
+
+// clockStep handles the wall clock moving apart from real time since the
+// last tick (NTP step, manual change).
+//
+// Times from time.Now carry a monotonic reading, and Sub between two of
+// them measures real time, so open segments, delays and caps stay right
+// across a step, which is only logged. A late tick (slow SD card) is not
+// a step: the valve really was open that long.
+//
+// Without monotonic readings (fake clocks in tests) a step can't be told
+// from a late tick, so any gap over maxStep, or backwards, counts as one:
+// open segments close at the last known time and continue from now, so a
+// step neither ends a run early nor counts water that was not given.
+func (r *Runner) clockStep(now time.Time) {
+	if r.lastNow.IsZero() {
+		return
+	}
+	wall := now.Round(0).Sub(r.lastNow.Round(0))
+	if hasMonotonic(now) && hasMonotonic(r.lastNow) {
+		if d := wall - now.Sub(r.lastNow); d > maxStep || d < -maxStep {
+			r.log.Warn("clock step", "by", d)
+			_ = r.store.AddEvent(now, "clock_jump", map[string]any{"from": r.lastNow.UTC(), "to": now.UTC()})
+		}
+		return
+	}
+	if wall >= 0 && wall <= maxStep {
+		return
+	}
+	for _, l := range r.lanes {
+		for _, it := range l.items {
+			if it.state == running {
+				seg := int(r.lastNow.Sub(it.openedAt)/time.Second) + 1
+				if seg < 0 {
+					seg = 0
+				}
+				it.run.ActualSeconds += seg
+				r.dayUsed[it.zone.ID] += seg
+				it.openedAt = now
+			}
+			if it.state == waiting {
+				it.waitTill = now
+			}
+		}
+		if !l.freeAt.IsZero() {
+			l.freeAt = now
+		}
+	}
+	_ = r.store.AddEvent(now, "clock_jump", map[string]any{"from": r.lastNow.UTC(), "to": now.UTC()})
+}
+
+// advanceLocked finishes and starts runs at now and writes the outputs.
+// before is the state signature at the start of the tick.
+func (r *Runner) advanceLocked(now time.Time, before string) bool {
 	capS := r.settings.DailyCapMinutes * 60
 	keys := r.laneKeys()
 
@@ -734,6 +773,16 @@ func (r *Runner) changed() {
 	if r.OnChange != nil {
 		r.OnChange()
 	}
+}
+
+// locked runs f under the lock. The deferred unlock matters: a panic in f
+// that a caller recovers (net/http does, per request) must not leave the
+// runner locked, or the tick loop would stall with valves open until the
+// systemd watchdog fires.
+func (r *Runner) locked(f func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	f()
 }
 
 // Shutdown stops all runs and switches everything off. Call it on exit.
