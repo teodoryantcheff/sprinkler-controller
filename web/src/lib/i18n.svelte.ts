@@ -54,6 +54,13 @@ const en = {
   confirm_stop_all: 'Stop every zone and clear the queue?', today: 'Today', tomorrow: 'Tomorrow',
   program: 'Program', zone: 'Zone', events_none: 'No events.',
   open_of: '{n} of {max} open', waiting_slot: 'waiting',
+  app: 'App on this phone', install_app: 'Install app', installed: 'Installed — open it from your home screen.',
+  ios_steps: 'In Safari, tap Share (□↑), then “Add to Home Screen”.',
+  android_steps: 'In Chrome, open the ⋮ menu, then “Add to Home screen” or “Install app”.',
+  https_hint: 'For the full app on Android (and no “Not secure” warning), use the HTTPS address after installing the certificate below once.',
+  open_https: 'Open over HTTPS', download_ca: 'Download certificate',
+  ca_steps_android: 'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate, pick the downloaded file.',
+  ca_steps_ios: 'iPhone: open the downloaded profile in Settings → Profile Downloaded → Install, then Settings → General → About → Certificate Trust Settings → turn it on.',
 }
 export type Key = keyof typeof en
 
@@ -112,6 +119,13 @@ const bg: Record<Key, string> = {
   confirm_stop_all: 'Да спра ли всички зони и да изчистя опашката?', today: 'Днес', tomorrow: 'Утре',
   program: 'Програма', zone: 'Зона', events_none: 'Няма събития.',
   open_of: 'отворени {n} от {max}', waiting_slot: 'чака',
+  app: 'Приложение на телефона', install_app: 'Инсталирай', installed: 'Инсталирано — отворете го от началния екран.',
+  ios_steps: 'В Safari натиснете Сподели (□↑), после „Добави към начален екран“.',
+  android_steps: 'В Chrome отворете менюто ⋮, после „Добавяне към началния екран“ или „Инсталиране на приложението“.',
+  https_hint: 'За пълно приложение на Android (и без „Не е защитено“) използвайте HTTPS адреса, след като веднъж инсталирате сертификата по-долу.',
+  open_https: 'Отвори през HTTPS', download_ca: 'Изтегли сертификата',
+  ca_steps_android: 'Android: Настройки → Сигурност → Шифроване и идентификационни данни → Инсталиране на сертификат → CA сертификат, изберете изтегления файл.',
+  ca_steps_ios: 'iPhone: отворете изтегления профил в Настройки → Изтеглен профил → Инсталирай, после Настройки → Общи → Информация → Настройки за доверие на сертификати → включете го.',
 }
 
 export const i18n = $state({ lang: (localStorage.getItem('lang') as 'en' | 'bg') || 'en' })

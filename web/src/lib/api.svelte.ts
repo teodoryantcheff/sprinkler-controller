@@ -34,9 +34,9 @@ export interface Settings {
   sensor: { enabled: boolean; kind: string; normally: string; on_delay_s: number; off_delay_s: number }
   max_open_zones: number; daily_cap_minutes: number; lan_no_login: boolean; language: 'en' | 'bg'; controller_on: boolean
 }
-export interface Me { user: string; logged_in: boolean; setup_required: boolean; language: string; device_name: string }
+export interface Me { user: string; logged_in: boolean; setup_required: boolean; language: string; device_name: string; https: boolean; ca_available: boolean }
 
-export const session = $state({ checked: false, loggedIn: false, setupRequired: false, deviceName: '' })
+export const session = $state({ checked: false, loggedIn: false, setupRequired: false, deviceName: '', caAvailable: false })
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -99,5 +99,6 @@ export async function checkSession() {
   session.loggedIn = me.logged_in
   session.setupRequired = me.setup_required
   session.deviceName = me.device_name
+  session.caAvailable = me.ca_available
   return me
 }

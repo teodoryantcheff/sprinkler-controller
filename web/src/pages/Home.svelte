@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n.svelte'
   import { dur, clock, when, zoneName, programName, minutes } from '../lib/format'
   import { toast, errMsg } from '../lib/ui.svelte'
+  import { install, promptInstall } from '../lib/install.svelte'
 
   const s = $derived(live.status)
   const tz = $derived(s?.timezone || 'Europe/Sofia')
@@ -65,7 +66,10 @@
 
 <header class="top">
   <h1>{t('home')}</h1>
-  <span class="chip {live.connected ? 'ok' : 'warn'} small">{live.connected ? t('live') : t('offline')}</span>
+  <div class="row">
+    {#if install.canPrompt && !install.installed}<button class="small" onclick={promptInstall}>{t('install_app')}</button>{/if}
+    <span class="chip {live.connected ? 'ok' : 'warn'} small">{live.connected ? t('live') : t('offline')}</span>
+  </div>
 </header>
 
 {#if !s}

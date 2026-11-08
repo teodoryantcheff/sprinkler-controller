@@ -3,6 +3,7 @@
   import { api, cache, loadZones, session, stopLive, type Settings } from '../lib/api.svelte'
   import { t, i18n, setLang } from '../lib/i18n.svelte'
   import { toast, errMsg, theme, applyTheme, type Theme } from '../lib/ui.svelte'
+  import { install, promptInstall } from '../lib/install.svelte'
 
   let s = $state<Settings | null>(null)
   let info = $state<Record<string, string | number>>({})
@@ -160,6 +161,31 @@
 
     <div class="row"><span class="grow"></span><button class="primary" disabled={saving}>{t('save')}</button></div>
   </form>
+
+  <h2>{t('app')}</h2>
+  <div class="card stack small">
+    {#if install.installed}
+      <span class="chip ok">{t('installed')}</span>
+    {:else}
+      {#if install.canPrompt}
+        <div><button class="primary" onclick={promptInstall}>{t('install_app')}</button></div>
+      {:else if install.ios}
+        <div>{t('ios_steps')}</div>
+      {:else}
+        <div>{t('android_steps')}</div>
+      {/if}
+      {#if !install.secure && session.caAvailable}
+        <div class="muted">{t('https_hint')}</div>
+      {/if}
+    {/if}
+    {#if session.caAvailable}
+      <div class="row wrap-row">
+        {#if !install.secure}<a class="btn" href={'https://' + location.hostname + '/'}>{t('open_https')}</a>{/if}
+        <a class="btn" href="/ca.crt" download="sprinkler-ca.crt">{t('download_ca')}</a>
+      </div>
+      <div class="muted">{install.ios ? t('ca_steps_ios') : t('ca_steps_android')}</div>
+    {/if}
+  </div>
 
   <h2>{t('change_password')}</h2>
   <form class="card stack" onsubmit={changePw}>

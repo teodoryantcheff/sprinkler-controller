@@ -1,8 +1,8 @@
 // Minimal service worker: makes the UI installable and lets the shell load
 // offline. API calls always go to the network.
-const CACHE = 'sprinkler-v1'
+const CACHE = 'sprinkler-v2'
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/icon.svg', '/manifest.webmanifest'])))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/icon.svg', '/icon-192.png', '/manifest.webmanifest'])))
   self.skipWaiting()
 })
 self.addEventListener('activate', (e) => {
