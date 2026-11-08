@@ -72,7 +72,7 @@ Their binaries, data and logs stay where they are (`/home/pi/OpenSprinklerGen2/`
 tar czf ~/opensprinkler-$(date +%F).tgz -C /home/pi OpenSprinklerGen2/nvm.dat OpenSprinklerGen2/stns.dat OpenSprinklerGen2/logs
 ```
 
-Free the GPIO lines. The old programs use the sysfs interface. While running, they had GPIO 4, 14, 15, 17, 22 and 27 exported, and exports can stay after the programs stop. Release ours: latch 22, data 27, clock 4, OE 17, rain sensor 14. GPIO 15 (RF transmitter) isn't used by the new controller and can stay.
+Free the GPIO lines. The old programs use the sysfs interface. While running, they had GPIO 4, 14, 15, 17, 22 and 27 exported, and exports can stay after the programs stop. Release ours (BCM GPIO numbers, header pins in brackets): latch 22 (15), data 27 (13), clock 4 (7), OE 17 (11), rain sensor 14 (8). GPIO 15 (header pin 10, RF transmitter) isn't used by the new controller and can stay.
 
 ```sh
 ls /sys/class/gpio/
@@ -90,7 +90,7 @@ The new service refuses to start while any of these lines is still held, so a fo
 sudo systemctl stop sprinkler
 sudoedit /etc/sprinkler/sprinkler.toml
 #   [outputs]      driver = "shiftreg"
-#   [inputs.rain]  sim = false        (pin = 14, normally = "open" are already set)
+#   [inputs.rain]  sim = false        (pin = 14 = GPIO14 / header pin 8, normally = "open" are already set)
 sudo systemctl start sprinkler
 journalctl -u sprinkler -f               # expect "outputs ready driver=shiftreg count=8"
 ```

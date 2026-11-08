@@ -1,6 +1,9 @@
 # sprinklerpi: Raspberry Pi 1 with a 74HC595 shift-register valve board
-# (BCM 22/27/4/17) and one normally-open rain sensor on BCM 14.
+# (GPIO 22/27/4/17) and one normally-open rain sensor on GPIO 14.
 # Installed on the Pi as /etc/sprinkler/sprinkler.toml.
+#
+# Pin values are BCM GPIO numbers (= gpiochip0 line offsets), not physical
+# header pins. The comments give the header pin of each one.
 #
 # For a dry run without switching valves, use driver = "sim" and
 # [inputs.rain] sim = true.
@@ -13,14 +16,14 @@ chip   = "gpiochip0"
 count  = 8
 
 [outputs.shiftreg]
-latch = 22
-data  = 27
-clock = 4
-oe    = 17
+latch = 22   # GPIO22, header pin 15
+data  = 27   # GPIO27, header pin 13
+clock = 4    # GPIO4,  header pin 7
+oe    = 17   # GPIO17, header pin 11 (active low)
 
 [inputs.rain]
 sim      = false
-pin      = 14
+pin      = 14   # GPIO14, header pin 8
 normally = "open"
 
 # HTTPS with a local CA kept in /var/lib/sprinkler/tls. The certificate
