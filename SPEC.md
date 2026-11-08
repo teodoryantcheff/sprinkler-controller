@@ -314,8 +314,7 @@ Cutover happens outside the watering season or on a dry week, so a mistake costs
 - [x] Zone and program names: imported from `nvm.dat`. Zones 1–4 "Ливада Зона 1–4", 5 "Туи", 6 "Домати" (disabled), 7 "Ц. Градинки", 8 "S08" (disabled).
 - [x] Master valve or pump: none.
 - [x] Sensors: one rain sensor on GPIO 14 (header pin 8), normally open. In 2.1.8, GPIO 23 (pin 16) is a button, not sensor 2. No flow meter.
-- [ ] Stay on the Pi 1 after cutover, or move to a Pi Zero 2 W on a current OS? The software runs on both; the OS on the Pi 1 stays out of support.
-- [ ] Access from outside the house: LAN only, or through a VPN such as Tailscale / WireGuard?
+- [x] Stay on the Pi 1 after cutover, or move to a Pi Zero 2 W on a current OS? Decided 2026-11-09: stay on the Pi 1 with Raspbian 10 for now, knowing the OS is out of support.- [ ] Access from outside the house: LAN only, or through a VPN such as Tailscale / WireGuard?
 - [ ] Which adjustment method should be the default once weather lands: OpenSprinkler service (Zimmerman) or ET-based from Open-Meteo?
 - [ ] Per-zone hard cap default: 120 min, or tighter (60)? (Implemented as 120 for now; it can be edited per zone.)
 - [ ] OpenSprinkler's clock: did it stay at a fixed UTC+2 through the summer? This decides how the imported June–October run times convert, and how Shadow compares. Check one summer day against a memory of real watering times, or watch for the change at the next DST switch.
