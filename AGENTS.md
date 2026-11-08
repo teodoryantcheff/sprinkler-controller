@@ -17,7 +17,7 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
   - All programs are imported disabled (off-season).
   - Updating the Pi: cross-build armv6, copy to `/tmp`, keep the previous binary as `/usr/local/bin/sprinkler.prev` (and the config as `.prev`), install, `systemctl restart sprinkler`. Check first that nothing is watering (`journalctl -u sprinkler | grep run`): a restart closes all valves.
 - **Open:** verify each zone with a 1-minute test in the garden, test the rollback once, then one week of correct watering closes the Cutover gate (`SPEC.md`). Planned-vs-actual comparison with OpenSprinkler's logs is no longer possible going forward; compare against the 2026 season logs instead.
-- Runbook (install, stash, rollback) is in `README.md`; dev server docs are there too. Remaining open questions are at the end of `SPEC.md`.
+- Runbook (install, stash, rollback) is in `docs/raspberry-pi.md`; dev server docs are in `docs/development.md`, phone setup in `docs/phone.md`. Remaining open questions are at the end of `SPEC.md`.
 
 ## The live controller — handle with care
 
@@ -31,7 +31,7 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
 
 ## Taking over from OpenSprinkler (Shadow and Cutover)
 
-The step-by-step runbook is in `README.md` under "Taking over from OpenSprinkler on the Pi": build and copy, install in shadow mode, stash OpenSprinkler and OSPy, switch to `shiftreg`, roll back. Rules for agents:
+The step-by-step runbook is in `docs/raspberry-pi.md`: build and copy, install in shadow mode, stash OpenSprinkler and OSPy, switch to `shiftreg`, roll back. Rules for agents:
 
 - Every step that runs on the Pi needs the user's explicit go-ahead for that step: installing the service, stopping or disabling OpenSprinkler or OSPy, unexporting GPIO, switching the driver. Approval for one step doesn't cover the next.
 - "Stash" means stop and disable, never delete or edit: `/home/pi/OpenSprinklerGen2/` (binary, `nvm.dat`, `stns.dat`, `logs/`), its init script and OSPy stay untouched, so the rollback just starts them again.
