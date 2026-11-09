@@ -95,9 +95,14 @@ const (
 	OutcomeSkippedSensor = "skipped_sensor"
 	OutcomeSkippedShort  = "skipped_short"
 	OutcomeSkippedDup    = "skipped_overlap"
+	OutcomeSkippedUser   = "skipped_user" // the user skipped this start in the Week view
 	OutcomeCutMax        = "cut_max"
 	OutcomeError         = "error"
 )
+
+// DefaultMaxMinutes is the per-zone hard cap for new zones. Real runs are
+// at most 35 min, so 60 halves the water lost if a run goes wrong.
+const DefaultMaxMinutes = 60
 
 // Run is one zone run, planned or done.
 type Run struct {

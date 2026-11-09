@@ -22,6 +22,8 @@ import (
 	"slices"
 	"sort"
 	"time"
+
+	"sprinkler/internal/fsutil"
 )
 
 const (
@@ -96,8 +98,11 @@ func serial() (*big.Int, error) {
 	return rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 126))
 }
 
+// writePEM writes atomically: a power loss mid-write must not leave a
+// torn CA file, which would make the controller mint a new CA that no
+// phone trusts.
 func writePEM(path, typ string, der []byte, mode os.FileMode) error {
-	return os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
+	return fsutil.WriteFileAtomic(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
 }
 
 func loadOrCreateCA(dir string, now time.Time) (*x509.Certificate, *ecdsa.PrivateKey, []byte, error) {

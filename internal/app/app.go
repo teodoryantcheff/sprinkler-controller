@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -34,8 +36,18 @@ type App struct {
 	// means always. Scheduled starts wait for the first sync.
 	ClockSynced func() bool
 
+	// SnapshotDir receives a checked copy of the database once a day
+	// ("" = off); SnapshotKeep is how many days are kept.
+	SnapshotDir  string
+	SnapshotKeep int
+
 	clockOK      atomic.Bool
 	clockWaiting atomic.Bool
+
+	snapMu  sync.Mutex
+	snapDay string    // local day of the last good snapshot
+	snapTry time.Time // last attempt (failures retry hourly)
+	snapErr string
 
 	mu       sync.RWMutex
 	settings core.Settings
@@ -180,6 +192,9 @@ func (a *App) clockReady(now time.Time) bool {
 	return false
 }
 
+// ClockTrusted reports whether the clock has synced since start-up.
+func (a *App) ClockTrusted() bool { return a.clockOK.Load() }
+
 // ClockWaiting reports whether scheduled programs are held until the
 // clock syncs.
 func (a *App) ClockWaiting() bool { return a.clockWaiting.Load() }
@@ -220,10 +235,18 @@ func (a *App) PlanTick(now time.Time) {
 	for _, p := range programs {
 		byID[p.ID] = p
 	}
+	skips, err := a.Store.Skips(from)
+	if err != nil {
+		a.Log.Error("load skips", "err", err)
+	}
 	for _, s := range due {
 		p := byID[s.ProgramID]
 		if done, err := a.Store.ProgramStarted(p.ID, s.Time); err != nil || done {
 			continue // never start the same planned start twice
+		}
+		if skips[store.SkipKey{ProgramID: p.ID, Start: s.Time.Unix()}] {
+			a.skipStart(now, p, s.Time, zm)
+			continue
 		}
 		if !settings.ControllerOn {
 			_ = a.Store.AddEvent(now, "program_skipped", map[string]any{"program_id": p.ID, "reason": "controller_off", "planned": s.Time.UTC()})
@@ -236,6 +259,63 @@ func (a *App) PlanTick(now time.Time) {
 		}
 		a.startProgram(now, p, s.Time, zm, a.Conditions(now))
 	}
+}
+
+// skipStart records a start the user skipped: its zone runs go to the
+// history as skipped_user, which also marks the start as handled.
+func (a *App) skipStart(now time.Time, p core.Program, at time.Time, zm map[int64]core.Zone) {
+	pid := p.ID
+	for _, pr := range schedule.Expand(p, at, zm, a.Conditions(now)) {
+		run := core.Run{ZoneID: pr.ZoneID, ProgramID: &pid, PlannedStart: at.UTC(), PlannedSeconds: pr.PlannedSeconds, ScalePct: pr.ScalePct, Outcome: core.OutcomeSkippedUser}
+		_ = a.Store.InsertRun(&run)
+	}
+	a.Log.Info("program start skipped by user", "program", p.Name)
+	_ = a.Store.AddEvent(now, "program_skipped", map[string]any{"program_id": p.ID, "reason": "user", "planned": at.UTC()})
+	a.Notify()
+}
+
+// ErrNotPlanned means a skip names no future start of that program.
+var ErrNotPlanned = errors.New("no such planned start")
+
+// SetSkip skips (or un-skips) one future start of a program, as listed by
+// Upcoming. The start must be one the planner would make.
+func (a *App) SetSkip(programID int64, at time.Time, skip bool) error {
+	settings, _, programs, loc := a.Snapshot()
+	now := a.Clock()
+	if !at.After(now) {
+		return ErrNotPlanned
+	}
+	var prog *core.Program
+	for i := range programs {
+		if programs[i].ID == programID {
+			prog = &programs[i]
+		}
+	}
+	if prog == nil {
+		return ErrNotPlanned
+	}
+	if skip {
+		env := schedule.Env{Loc: loc, Lat: settings.Lat, Lon: settings.Lon}
+		found := false
+		for _, s := range schedule.Due([]core.Program{*prog}, env, at.Add(-time.Second), at.Add(time.Second)) {
+			if s.Time.Equal(at) {
+				found = true
+			}
+		}
+		if !found {
+			return ErrNotPlanned
+		}
+	}
+	if err := a.Store.SetSkip(programID, at, skip); err != nil {
+		return err
+	}
+	kind := "start_skip_set"
+	if !skip {
+		kind = "start_skip_cleared"
+	}
+	_ = a.Store.AddEvent(now, kind, map[string]any{"program_id": programID, "planned": at.UTC()})
+	a.Notify()
+	return nil
 }
 
 // startProgram expands a program start, logs skipped zones and queues the rest.
@@ -401,6 +481,74 @@ func (a *App) PruneTick(now time.Time) {
 	}
 }
 
+// SnapshotTick copies the database to SnapshotDir once a local day, when
+// the clock is trusted and nothing is watering or queued. A failure is
+// logged and retried an hour later.
+func (a *App) SnapshotTick(now time.Time) {
+	if a.SnapshotDir == "" || !a.clockOK.Load() {
+		return
+	}
+	_, _, _, loc := a.Snapshot()
+	day := now.In(loc).Format("2006-01-02")
+	a.snapMu.Lock()
+	due := a.snapDay != day && (a.snapTry.IsZero() || now.Sub(a.snapTry) >= time.Hour || now.Before(a.snapTry))
+	a.snapMu.Unlock()
+	if !due {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(a.SnapshotDir, store.SnapshotName(day))); err == nil {
+		a.snapMu.Lock()
+		a.snapDay = day // already taken today (e.g. before a restart)
+		a.snapMu.Unlock()
+		return
+	}
+	if st := a.Runner.Snapshot(now); len(st.Running) > 0 || len(st.Queue) > 0 {
+		return // wait for a quiet moment
+	}
+	keep := a.SnapshotKeep
+	if keep <= 0 {
+		keep = 7
+	}
+	path, err := a.Store.Snapshot(a.SnapshotDir, day, keep)
+	a.snapMu.Lock()
+	a.snapTry = now
+	if err != nil {
+		first := a.snapErr == ""
+		a.snapErr = err.Error()
+		a.snapMu.Unlock()
+		a.Log.Error("database snapshot", "err", err)
+		if first {
+			_ = a.Store.AddEvent(now, "snapshot_failed", map[string]any{"error": err.Error()})
+		}
+		return
+	}
+	a.snapDay, a.snapErr = day, ""
+	a.snapMu.Unlock()
+	a.Log.Info("database snapshot", "file", path)
+}
+
+// SnapshotState is the last snapshot as the health check reports it.
+type SnapshotState struct {
+	Enabled bool      `json:"enabled"`
+	Last    time.Time `json:"last,omitzero"`
+	Error   string    `json:"error,omitempty"`
+}
+
+// SnapshotStatus reports the newest snapshot on disk and the last error.
+func (a *App) SnapshotStatus() SnapshotState {
+	if a.SnapshotDir == "" {
+		return SnapshotState{}
+	}
+	out := SnapshotState{Enabled: true}
+	if _, t, err := store.LatestSnapshot(a.SnapshotDir); err == nil && !t.IsZero() {
+		out.Last = t.UTC()
+	}
+	a.snapMu.Lock()
+	out.Error = a.snapErr
+	a.snapMu.Unlock()
+	return out
+}
+
 // Loop runs the planner and sensor until ctx is done.
 func (a *App) Loop(ctx context.Context) {
 	t := time.NewTicker(time.Second)
@@ -414,6 +562,7 @@ func (a *App) Loop(ctx context.Context) {
 			a.SensorTick(now)
 			a.PlanTick(now)
 			a.PruneTick(now)
+			a.SnapshotTick(now)
 		}
 	}
 }
@@ -429,8 +578,19 @@ func (a *App) Upcoming(from, until time.Time, limit int) []schedule.PlannedRun {
 	for _, p := range programs {
 		byID[p.ID] = p
 	}
+	skips, err := a.Store.Skips(from.Add(-time.Minute))
+	if err != nil {
+		a.Log.Error("load skips", "err", err)
+	}
 	var runs []schedule.PlannedRun
 	for _, s := range starts {
+		if skips[store.SkipKey{ProgramID: s.ProgramID, Start: s.Time.Unix()}] {
+			for _, r := range schedule.Expand(byID[s.ProgramID], s.Time, zm, a.Conditions(s.Time)) {
+				r.Skip = core.OutcomeSkippedUser
+				runs = append(runs, r)
+			}
+			continue
+		}
 		c := a.Conditions(s.Time)
 		if !c.RainDelay {
 			c.SensorWet = false // the sensor state now says little about future days

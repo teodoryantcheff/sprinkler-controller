@@ -96,27 +96,108 @@ CREATE TABLE users (
   created       INTEGER NOT NULL
 );
 `,
+	// 2: planned starts skipped by hand (Week view); tighter default cap.
+	// Zones still at the old default of 120 min drop to 60 unless a
+	// program asks for longer than 60 min on them.
+	`
+CREATE TABLE skips (
+  program_id    INTEGER NOT NULL,
+  planned_start INTEGER NOT NULL,
+  PRIMARY KEY (program_id, planned_start)
+);
+UPDATE zones SET max_minutes = 60
+ WHERE max_minutes = 120
+   AND id NOT IN (SELECT zone_id FROM program_zones WHERE seconds > 3600);
+`,
 }
 
 // Store wraps the database.
 type Store struct {
-	DB *sql.DB
+	DB   *sql.DB
+	path string
 }
 
-// Open opens (and migrates) the database at path.
+// Path is the database file.
+func (s *Store) Path() string { return s.path }
+
+// ErrCorrupt means the database file failed its integrity check.
+var ErrCorrupt = errors.New("database is corrupt")
+
+// isCorrupt reports whether err is SQLite's "malformed" or "not a database".
+func isCorrupt(err error) bool {
+	if err == nil {
+		return false
+	}
+	m := err.Error()
+	return strings.Contains(m, "malformed") || strings.Contains(m, "not a database") ||
+		strings.Contains(m, "SQLITE_CORRUPT") || strings.Contains(m, "SQLITE_NOTADB")
+}
+
+func corrupt(err error) error {
+	if isCorrupt(err) {
+		return fmt.Errorf("%w: %w", ErrCorrupt, err)
+	}
+	return err
+}
+
+// Open opens (and migrates) the database at path. It checks the file's
+// integrity first and returns an error wrapping ErrCorrupt if the check
+// fails (e.g. after a power loss on a worn SD card).
+//
+// synchronous(FULL): in WAL mode NORMAL can lose the last commits on a
+// power loss; FULL syncs every commit. Writes are rare (run start and end,
+// a heartbeat every 30 s while watering), so the SD card hardly notices.
 func Open(path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(FULL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1) // one writer; keeps the Pi 1 light
-	s := &Store{DB: db}
-	if err := s.migrate(); err != nil {
+	s := &Store{DB: db, path: path}
+	if err := s.QuickCheck(); err != nil {
 		db.Close()
 		return nil, err
 	}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, corrupt(err)
+	}
 	return s, nil
+}
+
+// QuickCheck runs SQLite's quick integrity check. It returns an error
+// wrapping ErrCorrupt when the file is damaged.
+func (s *Store) QuickCheck() error {
+	rows, err := s.DB.Query("PRAGMA quick_check")
+	if err != nil {
+		return corrupt(err)
+	}
+	defer rows.Close()
+	var msgs []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			return corrupt(err)
+		}
+		msgs = append(msgs, m)
+	}
+	if err := rows.Err(); err != nil {
+		return corrupt(err)
+	}
+	if len(msgs) != 1 || msgs[0] != "ok" {
+		if len(msgs) > 5 {
+			msgs = msgs[:5]
+		}
+		return fmt.Errorf("%w: %s", ErrCorrupt, strings.Join(msgs, "; "))
+	}
+	return nil
+}
+
+// Ping checks that the database answers.
+func (s *Store) Ping(ctx context.Context) error {
+	var one int
+	return s.DB.QueryRowContext(ctx, "SELECT 1").Scan(&one)
 }
 
 // OpenReadOnly opens an existing database without migrating or writing,
@@ -219,20 +300,26 @@ func (s *Store) Settings() (core.Settings, error) {
 	if err := rows.Err(); err != nil {
 		return st, err
 	}
-	// Re-marshal through the struct so unknown keys are ignored and
-	// missing ones keep their defaults.
+	// Apply one key at a time over the defaults: unknown keys are ignored
+	// (raw settings and secrets share the table), missing ones keep their
+	// defaults, and one damaged value keeps its default instead of keeping
+	// the controller from starting.
 	cur, _ := json.Marshal(st)
 	var base map[string]json.RawMessage
 	_ = json.Unmarshal(cur, &base)
 	for k, v := range m {
-		// Only typed keys; raw settings (secrets) share the table.
-		if _, known := base[k]; known && json.Valid(v) {
-			base[k] = v
+		if _, known := base[k]; !known || !json.Valid(v) {
+			continue
 		}
-	}
-	all, _ := json.Marshal(base)
-	if err := json.Unmarshal(all, &st); err != nil {
-		return core.DefaultSettings(), fmt.Errorf("settings: %w", err)
+		one, err := json.Marshal(map[string]json.RawMessage{k: v})
+		if err != nil {
+			continue
+		}
+		next := st
+		if err := json.Unmarshal(one, &next); err != nil {
+			continue // keep the value so far
+		}
+		st = next
 	}
 	return st, nil
 }
@@ -321,7 +408,7 @@ func (s *Store) Zone(id int64) (core.Zone, error) {
 // SaveZone inserts (ID == 0) or updates a zone.
 func (s *Store) SaveZone(z *core.Zone) error {
 	if z.MaxMinutes <= 0 {
-		z.MaxMinutes = 120
+		z.MaxMinutes = core.DefaultMaxMinutes
 	}
 	if z.ID == 0 {
 		res, err := s.DB.Exec(`INSERT INTO zones(output_index,name,enabled,group_id,uses_master,ignore_rain,ignore_sensor,max_minutes,sort_order)
@@ -670,7 +757,48 @@ func (s *Store) Prune(t time.Time) (runs, events int64, err error) {
 		return runs, 0, err
 	}
 	events, err = res.RowsAffected()
+	if err != nil {
+		return runs, events, err
+	}
+	_, err = s.DB.Exec("DELETE FROM skips WHERE planned_start < ?", unix(t))
 	return runs, events, err
+}
+
+// ---- skips (planned starts the user skipped in the Week view)
+
+// SkipKey identifies one planned program start.
+type SkipKey struct {
+	ProgramID int64
+	Start     int64 // unix seconds
+}
+
+// SetSkip marks (skip) or unmarks a planned program start.
+func (s *Store) SetSkip(programID int64, plannedStart time.Time, skip bool) error {
+	var err error
+	if skip {
+		_, err = s.DB.Exec("INSERT OR IGNORE INTO skips(program_id, planned_start) VALUES(?,?)", programID, unix(plannedStart))
+	} else {
+		_, err = s.DB.Exec("DELETE FROM skips WHERE program_id=? AND planned_start=?", programID, unix(plannedStart))
+	}
+	return err
+}
+
+// Skips returns the skipped starts at or after t.
+func (s *Store) Skips(t time.Time) (map[SkipKey]bool, error) {
+	rows, err := s.DB.Query("SELECT program_id, planned_start FROM skips WHERE planned_start >= ?", unix(t))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[SkipKey]bool{}
+	for rows.Next() {
+		var k SkipKey
+		if err := rows.Scan(&k.ProgramID, &k.Start); err != nil {
+			return nil, err
+		}
+		out[k] = true
+	}
+	return out, rows.Err()
 }
 
 // Events lists events newest first.

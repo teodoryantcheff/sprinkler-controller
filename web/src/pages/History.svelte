@@ -43,11 +43,17 @@
     }
   }
 
-  onMount(async () => {
+  // Weekly totals: how many weeks back (history is kept for 6 months).
+  let range = $state(6)
+  async function loadWeeks() {
+    weeks = await api<Week[]>('GET', `/api/history/weekly?weeks=${range}`).catch(() => [])
+  }
+
+  onMount(() => {
     loadZones()
     loadPrograms()
     loadRuns()
-    weeks = await api<Week[]>('GET', '/api/history/weekly?weeks=10').catch(() => [])
+    loadWeeks()
   })
 
   // Group runs by local day
@@ -66,13 +72,27 @@
     return out
   })
 
-  // Weekly table: rows = zones, columns = last weeks
-  const weekCols = $derived([...new Set(weeks.map((w) => w.week))].sort().slice(-6))
-  const weekZones = $derived([...new Set(weeks.map((w) => w.zone_id))].sort((a, b) => a - b))
-  function weekMin(z: number, w: string) {
-    const m = weeks.find((x) => x.zone_id === z && x.week === w)?.minutes
-    return m ? Math.round(m) : ''
-  }
+  // Weekly table: rows = zones, columns = every week in the range (local
+  // Mondays, newest last, empty weeks included), with totals.
+  const weekCols = $derived.by(() => {
+    const now = live.status ? Date.parse(live.status.now) : Date.now()
+    const today = new Date(new Date(now).toLocaleDateString('en-CA', { timeZone: tz }) + 'T12:00:00Z')
+    const monday = new Date(today.getTime() - ((today.getUTCDay() + 6) % 7) * 86400000)
+    const out: string[] = []
+    for (let i = range - 1; i >= 0; i--)
+      out.push(new Date(monday.getTime() - i * 7 * 86400000).toISOString().slice(0, 10))
+    return out
+  })
+  const weekZones = $derived.by(() => {
+    const ids = new Set([...cache.zones.map((z) => z.id), ...weeks.map((w) => w.zone_id)])
+    return [...ids].filter((id) => weeks.some((w) => w.zone_id === id)).sort((a, b) => a - b)
+  })
+  const mins = (z: number | null, w: string | null) =>
+    weeks
+      .filter((x) => (z == null || x.zone_id === z) && (w == null || x.week === w))
+      .reduce((n, x) => n + x.minutes, 0)
+  // Whole minutes; under one minute shows "<1" so rows and totals agree.
+  const cell = (m: number) => (m <= 0 ? '·' : m < 1 ? '<1' : String(Math.round(m)))
 
   function eventKind(kind: string) {
     const k = ('ev_' + kind) as Key
@@ -119,7 +139,10 @@
           out.push(v === 'soil' ? t('soil') : t('rain'))
           break
         case 'reason':
-          out.push(v === 'controller_off' ? t('reason_controller_off') : String(v))
+          out.push(v === 'controller_off' ? t('reason_controller_off') : v === 'user' ? t('reason_user') : String(v))
+          break
+        case 'snapshot':
+          out.push(`${t('snapshot')} ${v}`)
           break
         default:
           out.push(typeof v === 'object' ? JSON.stringify(v) : String(v))
@@ -128,7 +151,16 @@
     return out.join(' · ')
   }
 
-  const outcomes = ['done', 'stopped', 'skipped_rain', 'skipped_sensor', 'skipped_short', 'cut_max', 'error']
+  const outcomes = [
+    'done',
+    'stopped',
+    'skipped_rain',
+    'skipped_sensor',
+    'skipped_short',
+    'skipped_user',
+    'cut_max',
+    'error',
+  ]
   function outcomeClass(o: string) {
     return o === 'done' ? 'ok' : o === 'error' ? 'bad' : o.startsWith('skipped') || o === 'cut_max' ? 'warn' : ''
   }
@@ -156,29 +188,43 @@
 </header>
 
 {#if tab === 'runs'}
-  {#if weekCols.length}
-    <h2><Icon name="calendar" />{t('minutes_per_week')}</h2>
-    <div class="card" style="overflow-x:auto">
+  <h2 class="row spread">
+    <span class="row" style="gap:8px"><Icon name="calendar" />{t('minutes_per_week')}</span>
+    <select class="small" style="width:auto" bind:value={range} onchange={loadWeeks} aria-label={t('minutes_per_week')}>
+      {#each [6, 12, 26] as n}<option value={n}>{t('weeks_n', { n })}</option>{/each}
+    </select>
+  </h2>
+  <div class="card" style="overflow-x:auto">
+    {#if weekZones.length === 0}
+      <span class="muted">{t('no_watering_period')}</span>
+    {:else}
       <table>
         <thead
           ><tr
             ><th>{t('zone')}</th>{#each weekCols as w}<th class="num"
                 >{new Date(w + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}</th
-              >{/each}</tr
+              >{/each}<th class="num">{t('sum')}</th></tr
           ></thead
         >
         <tbody>
           {#each weekZones as z}
             <tr
               ><td class="ellipsis" style="max-width:9em">{zoneName(cache.zones, z)}</td>{#each weekCols as w}<td
-                  class="num">{weekMin(z, w)}</td
-                >{/each}</tr
+                  class="num">{cell(mins(z, w))}</td
+                >{/each}<td class="num"><strong>{cell(mins(z, null))}</strong></td></tr
             >
           {/each}
         </tbody>
+        <tfoot>
+          <tr
+            ><th>{t('sum')}</th>{#each weekCols as w}<th class="num">{cell(mins(null, w))}</th>{/each}<th class="num"
+              >{cell(mins(null, null))}</th
+            ></tr
+          >
+        </tfoot>
       </table>
-    </div>
-  {/if}
+    {/if}
+  </div>
 
   <h2><Icon name="list" />{t('runs_tab')}</h2>
   <div class="row wrap-row filters" style="margin-bottom:10px">

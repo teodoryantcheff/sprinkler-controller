@@ -151,6 +151,38 @@ make deploy         # the same checks, then install and restart after a y/N prom
 
 Use another host with `HOST=pi@sprinklerpi.local make deploy`. To roll back a bad update, check out the previous commit and run `make deploy` again.
 
+## Power loss and the SD card
+
+The Pi has no UPS and a 2016 SD card, so the service assumes power can go at any moment.
+
+What the service does by itself:
+
+- **Every commit is synced** (SQLite WAL with `synchronous=FULL`). A power cut loses at most the write in flight, never committed runs or settings. Writes are rare (run start and end, plus a heartbeat every 30 s while watering).
+- **Integrity check at start-up** (`PRAGMA quick_check`, about a second on the Pi 1).
+- **Daily snapshots.** Once a local day, after the clock has synced and while nothing is watering, a checked copy of the database goes to `/var/lib/sprinkler/snapshots/sprinkler-YYYY-MM-DD.db`. The last 7 are kept. The copy is written to a temp file, checked, synced, then renamed.
+- **Automatic restore.** If the database fails its check (or is an empty file) at start-up, it is moved aside as `sprinkler.db.corrupt-<time>` (with its `-wal`/`-shm`) and the newest snapshot that passes the check takes its place. A `db_restored` event shows in History → Events. Runs since that snapshot are lost; zones, programs and settings rarely change in a day.
+- **No snapshot, no start.** Without a usable snapshot the service fails to start, with all valves off, rather than starting on an empty database (that would open first-time setup to anyone on the LAN). Restore by hand from `~/opensprinkler-2026-11-08.tgz` + import, or from a JSON backup (Settings → Backup).
+- **Run recovery.** Runs left open by the cut are closed as `error` with the duration from the last heartbeat (`crash_recovery` event). Nothing resumes watering by itself.
+- **Torn-file safety.** The TLS CA and certificate are written atomically (temp file, sync, rename), so a cut can't leave a half-written CA that would force phones to trust a new one.
+- **Damaged settings** keep their defaults one key at a time instead of stopping start-up.
+
+Config (`/etc/sprinkler/sprinkler.toml`, all optional):
+
+```toml
+[snapshots]
+# off  = true                          # disable
+# dir  = "/var/lib/sprinkler/snapshots" # default: <db dir>/snapshots
+# keep = 7
+```
+
+Watch it from the laptop or a monitor: `curl -fsS http://192.168.1.20/api/health` returns `503` when the controller can't water and `"degraded"` when the snapshot is older than 48 h.
+
+Recommended OS settings (not applied yet; each needs a go-ahead on the Pi):
+
+- `fsck.repair=yes` in `/boot/cmdline.txt`, so the root file system is repaired at boot after a cut instead of mounting read-only. Check first: `grep -o 'fsck.repair=[a-z]*' /boot/cmdline.txt`.
+- `noatime` on the root mount in `/etc/fstab` to cut SD writes.
+- Copy snapshots off the card now and then; a dying card takes its snapshots with it. The directory belongs to the `sprinkler` user, hence `sudo` on the Pi side: `rsync -a --rsync-path="sudo rsync" pi@192.168.1.20:/var/lib/sprinkler/snapshots/ ~/backups/sprinkler-snapshots/` (read-only on the Pi).
+
 ## Rollback to OpenSprinkler
 
 ```sh

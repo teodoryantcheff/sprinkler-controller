@@ -133,6 +133,7 @@ func Parse(dir string, opt Options) (*Data, error) {
 	}
 	d.parseZones(nvm, opts)
 	d.parsePrograms(nvm, opt.Today.In(loc))
+	d.fitCaps()
 	if b, err := os.ReadFile(filepath.Join(dir, "stns.dat")); err == nil {
 		d.checkSpecialStations(b, nvm)
 	}
@@ -242,7 +243,7 @@ func (d *Data) parseZones(nvm, opts []byte) {
 			Enabled:     !bit(dis, sid),
 			UsesMaster:  master > 0 && master != sid+1 && bit(mas, sid),
 			IgnoreRain:  bit(ign, sid),
-			MaxMinutes:  120,
+			MaxMinutes:  core.DefaultMaxMinutes,
 			SortOrder:   sid,
 		}
 		// 2.1.8 has a single "ignore rain" bit that covers delay and sensor.
@@ -513,6 +514,21 @@ func (d *Data) parseLogs(dir string, loc *time.Location) error {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// fitCaps raises a zone's hard cap where an imported program asks for
+// longer than the default, so the cap never cuts a run the user set up.
+func (d *Data) fitCaps() {
+	for i := range d.Zones {
+		z := &d.Zones[i]
+		for _, p := range d.Programs {
+			for _, pz := range p.Zones {
+				if pz.ZoneID == z.ID {
+					z.MaxMinutes = max(z.MaxMinutes, (pz.Seconds+59)/60)
+				}
+			}
+		}
+	}
+}
 
 // Import writes the data into an empty store. With force, existing zones,
 // programs, runs and events are deleted first.

@@ -107,7 +107,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 func TestZones(t *testing.T) {
 	st := open(t)
 	zs := addZones(t, st, "Lawn", "Hedge")
-	if zs[0].MaxMinutes != 120 {
+	if zs[0].MaxMinutes != core.DefaultMaxMinutes {
 		t.Errorf("default max minutes %d", zs[0].MaxMinutes)
 	}
 	z := zs[1]

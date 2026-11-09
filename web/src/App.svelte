@@ -8,6 +8,7 @@
   import ProgramEdit from './pages/ProgramEdit.svelte'
   import Zones from './pages/Zones.svelte'
   import History from './pages/History.svelte'
+  import Week from './pages/Week.svelte'
   import Settings from './pages/Settings.svelte'
   import Icon from './lib/Icon.svelte'
 
@@ -56,7 +57,8 @@
     { path: '/settings', key: 'settings', icon: 'settings' },
   ] as const
 
-  const section = $derived('/' + (route.path.split('/')[1] || ''))
+  // The Week view belongs to the Programs tab.
+  const section = $derived(route.path === '/week' ? '/programs' : '/' + (route.path.split('/')[1] || ''))
 </script>
 
 {#if !session.checked}
@@ -95,6 +97,8 @@
       <Programs />
     {:else if route.path.startsWith('/programs/')}
       {#key route.path}<ProgramEdit id={route.path.split('/')[2]} />{/key}
+    {:else if route.path === '/week'}
+      <Week />
     {:else if route.path === '/zones'}
       <Zones />
     {:else if route.path === '/history'}

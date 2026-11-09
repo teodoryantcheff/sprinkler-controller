@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -170,6 +171,7 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("GET /ca.crt", s.caCert)
 	m.HandleFunc("GET /api/docs", s.apiDocs)
 	m.HandleFunc("GET /api/docs.md", s.apiDocsMarkdown)
+	m.HandleFunc("GET /api/health", s.health)
 	m.HandleFunc("GET /api/me", s.open(s.me))
 	m.HandleFunc("POST /api/setup", s.open(s.setup))
 	m.HandleFunc("POST /api/login", s.open(s.login))
@@ -191,6 +193,7 @@ func (s *Server) routes(m *http.ServeMux) {
 	m.HandleFunc("POST /api/programs/preview", s.auth(s.previewProgram))
 	m.HandleFunc("POST /api/programs/{id}/run", s.auth(s.runProgram))
 	m.HandleFunc("GET /api/upcoming", s.auth(s.upcoming))
+	m.HandleFunc("POST /api/skip", s.auth(s.skip))
 
 	m.HandleFunc("POST /api/run/zone", s.auth(s.runZone))
 	m.HandleFunc("POST /api/run/once", s.auth(s.runOnce))
@@ -668,6 +671,114 @@ func (s *Server) upcoming(w http.ResponseWriter, r *http.Request) (any, error) {
 		runs = []schedule.PlannedRun{}
 	}
 	return runs, nil
+}
+
+// skip skips (or un-skips) one planned program start from the Week view.
+func (s *Server) skip(w http.ResponseWriter, r *http.Request) (any, error) {
+	var req struct {
+		ProgramID    int64     `json:"program_id"`
+		PlannedStart time.Time `json:"planned_start"`
+		Skip         bool      `json:"skip"`
+	}
+	if err := decode(r, &req); err != nil {
+		return nil, err
+	}
+	if err := s.app.SetSkip(req.ProgramID, req.PlannedStart, req.Skip); err != nil {
+		if errors.Is(err, app.ErrNotPlanned) {
+			return nil, bad("%v", err)
+		}
+		return nil, err
+	}
+	return nil, nil
+}
+
+// ---- health
+
+// Health is the answer of /api/health, for uptime monitors. It needs no
+// login and holds no secrets: only pass/fail facts.
+type Health struct {
+	Status  string         `json:"status"` // ok | degraded | fail
+	Version string         `json:"version"`
+	Uptime  int64          `json:"uptime_s"`
+	Checks  map[string]any `json:"checks"`
+}
+
+// healthStale is how old the runner's last tick may be (it ticks every
+// second; systemd's watchdog restarts the service after 30 s).
+const healthStale = 10 * time.Second
+
+// health reports 200 when the controller can water ("ok", or "degraded"
+// for problems that don't stop watering) and 503 when it cannot ("fail":
+// runner loop stalled, database unreachable, valve outputs in fault).
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	now := s.app.Clock()
+	h := Health{Status: "ok", Version: s.app.Version, Uptime: int64(now.Sub(s.app.Started).Seconds()), Checks: map[string]any{}}
+	fail := func() { h.Status = "fail" }
+	degrade := func() {
+		if h.Status == "ok" {
+			h.Status = "degraded"
+		}
+	}
+
+	tick := s.app.Runner.LastTick()
+	runnerOK := !tick.IsZero() && now.Sub(tick) < healthStale
+	rc := map[string]any{"ok": runnerOK}
+	if !tick.IsZero() {
+		rc["last_tick_s"] = int64(now.Sub(tick).Seconds())
+	}
+	h.Checks["runner"] = rc
+	if !runnerOK {
+		fail()
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	dbOK := s.app.Store.Ping(ctx) == nil
+	h.Checks["db"] = map[string]any{"ok": dbOK}
+	if !dbOK {
+		fail()
+	}
+
+	st := s.app.Runner.Snapshot(now)
+	h.Checks["outputs"] = map[string]any{"ok": st.Fault == "", "driver": st.Driver}
+	if st.Fault != "" {
+		fail()
+	}
+
+	synced := s.app.ClockTrusted()
+	h.Checks["clock"] = map[string]any{"ok": synced}
+	if !synced {
+		degrade()
+	}
+
+	sensor := s.app.SensorState()
+	if sensor.Enabled {
+		h.Checks["sensor"] = map[string]any{"ok": sensor.Error == ""}
+		if sensor.Error != "" {
+			degrade()
+		}
+	}
+
+	if snap := s.app.SnapshotStatus(); snap.Enabled {
+		// Daily snapshots wait for a synced clock and a quiet moment, so
+		// allow two days before calling them overdue.
+		fresh := !snap.Last.IsZero() && now.Sub(snap.Last) < 48*time.Hour
+		sc := map[string]any{"ok": fresh && snap.Error == ""}
+		if !snap.Last.IsZero() {
+			sc["age_h"] = int64(now.Sub(snap.Last).Hours())
+		}
+		h.Checks["backup"] = sc
+		if !fresh || snap.Error != "" {
+			degrade()
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if h.Status == "fail" {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	_ = json.NewEncoder(w).Encode(h)
 }
 
 // ---- manual control

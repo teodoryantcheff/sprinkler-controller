@@ -56,6 +56,7 @@ curl -b jar -H "$H" -d '{}' http://sprinklerpi/api/stop
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
+| GET | `/api/health` | open | Health check for uptime monitors |
 | GET | `/api/me` | open | Who am I, is setup needed |
 | POST | `/api/setup` | open | Create the first user |
 | POST | `/api/login` | open | Log in |
@@ -74,6 +75,7 @@ curl -b jar -H "$H" -d '{}' http://sprinklerpi/api/stop
 | POST | `/api/programs/preview` | yes | Next starts of an unsaved program |
 | POST | `/api/programs/{id}/run` | yes | Run a program now |
 | GET | `/api/upcoming` | yes | Planned runs for the next days |
+| POST | `/api/skip` | yes | Skip or restore one planned program start |
 | POST | `/api/run/zone` | yes | Manual run of one zone |
 | POST | `/api/run/once` | yes | Ad-hoc run of several zones |
 | POST | `/api/stop` | yes | Stop a run, a zone or everything |
@@ -140,6 +142,34 @@ Clears the cookie. Needs no body.
 Needs a cookie session, not LAN access. `403` if `current` is wrong, `400` if `new` is shorter than 7 characters. Every other session is logged out; the caller gets a fresh cookie. Wrong `current` passwords count towards the login limit (`429`).
 
 ## Status
+
+### `GET /api/health` (open)
+
+For uptime monitors (Uptime Kuma, a cron `curl -f`). No login, no secrets: only pass/fail facts.
+
+```json
+{
+  "status": "ok",
+  "version": "v0.1.0",
+  "uptime_s": 86400,
+  "checks": {
+    "runner":  { "ok": true, "last_tick_s": 0 },
+    "db":      { "ok": true },
+    "outputs": { "ok": true, "driver": "shiftreg" },
+    "clock":   { "ok": true },
+    "sensor":  { "ok": true },
+    "backup":  { "ok": true, "age_h": 7 }
+  }
+}
+```
+
+| `status` | HTTP | Meaning |
+| --- | --- | --- |
+| `ok` | 200 | Everything passes |
+| `degraded` | 200 | Watering works, but the clock hasn't synced yet, the sensor can't be read, or the daily database snapshot is missing, older than 48 h or failed |
+| `fail` | 503 | The controller can't water: the runner loop hasn't ticked for 10 s, the database doesn't answer, or the valve outputs are in fault |
+
+`sensor` appears only when a sensor is enabled, and `backup` only when snapshots are on.
 
 ### `GET /api/state`
 
@@ -322,7 +352,19 @@ Planned runs for the next `days` days (1–31, default 7), skipped ones included
 
 - `planned_start` is the program start and `est_start` is the estimated valve-open time after earlier steps and the zone delay.
 - `seconds` is the duration after scaling.
-- `skip` is absent for runs that will water. Otherwise it is `skipped_rain`, `skipped_sensor` or `skipped_short`.
+- `skip` is absent for runs that will water. Otherwise it is `skipped_rain`, `skipped_sensor`, `skipped_short` or `skipped_user` (skipped with `/api/skip`).
+
+The Week view groups these by `program_id` + `planned_start` (one program start).
+
+### `POST /api/skip`
+
+Skips one future start of a program, or restores it:
+
+```json
+{ "program_id": 2, "planned_start": "2026-11-09T04:00:00Z", "skip": true }
+```
+
+`planned_start` must be a start the planner would make (as listed by `/api/upcoming`), in the future; otherwise `400` (`no such planned start`). When a skipped start comes due, nothing waters: its zone runs are logged with outcome `skipped_user` and a `program_skipped` event with `"reason": "user"`. Setting and clearing a skip log `start_skip_set` / `start_skip_cleared`.
 
 ## Manual control
 
@@ -410,7 +452,7 @@ Page backwards by passing the oldest `planned_start` as `before`.
 }
 ```
 
-Outcomes: `done`, `stopped`, `skipped_rain`, `skipped_sensor`, `skipped_short`, `skipped_overlap`, `cut_max`, `error`. `start` and `end` are `null` when the valve never opened.
+Outcomes: `done`, `stopped`, `skipped_rain`, `skipped_sensor`, `skipped_short`, `skipped_overlap`, `skipped_user`, `cut_max`, `error`. `start` and `end` are `null` when the valve never opened.
 
 ### `GET /api/history/weekly?weeks=12`
 
@@ -428,7 +470,7 @@ Events other than runs, newest first. `before` (RFC 3339 or Unix seconds) and `l
 { "id": 40, "time": "2026-11-08T08:00:00Z", "kind": "boot", "detail": { } }
 ```
 
-`detail` is free-form JSON (it may be `null`). Kinds: `boot`, `clock_jump`, `crash_recovery`, `cut_daily_cap`, `cut_max`, `fault_cleared`, `output_error`, `pause`, `resume`, `stop_all`, `program_error`, `program_overlap`, `program_skipped`, `rain_delay_set`, `rain_delay_ended`, `sensor_wet`, `sensor_dry`, `settings_changed`, `restore`.
+`detail` is free-form JSON (it may be `null`). Kinds: `boot`, `clock_jump`, `crash_recovery`, `cut_daily_cap`, `cut_max`, `fault_cleared`, `output_error`, `pause`, `resume`, `stop_all`, `program_error`, `program_overlap`, `program_skipped`, `rain_delay_set`, `rain_delay_ended`, `sensor_wet`, `sensor_dry`, `settings_changed`, `restore`, `start_skip_set`, `start_skip_cleared`, `snapshot_failed`, `db_restored`.
 
 ## Settings and backup
 

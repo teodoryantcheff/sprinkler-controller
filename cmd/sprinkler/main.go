@@ -63,6 +63,12 @@ type Config struct {
 		// once (default true; the Pi has no hardware clock).
 		WaitSync bool `toml:"wait_sync"`
 	} `toml:"clock"`
+	Snapshots struct {
+		// Off disables the daily database snapshots.
+		Off  bool   `toml:"off"`
+		Dir  string `toml:"dir"`  // default: <db dir>/snapshots
+		Keep int    `toml:"keep"` // days kept (default 7)
+	} `toml:"snapshots"`
 	TLS struct {
 		Listen string   `toml:"listen"` // e.g. ":443"; empty = no HTTPS
 		Hosts  []string `toml:"hosts"`  // names/IPs for the certificate; default: hostname(.local) + current IPs
@@ -83,7 +89,47 @@ func defaultConfig() Config {
 	c.Inputs.Rain.Pin = -1
 	c.Inputs.Rain.Normally = "open"
 	c.Clock.WaitSync = true
+	c.Snapshots.Keep = 7
 	return c
+}
+
+// snapshotDir is where daily database snapshots go ("" = off).
+func (c Config) snapshotDir() string {
+	if c.Snapshots.Off {
+		return ""
+	}
+	if c.Snapshots.Dir != "" {
+		return c.Snapshots.Dir
+	}
+	return filepath.Join(filepath.Dir(c.DB), "snapshots")
+}
+
+// openStore opens the database. If the file is damaged (a power loss on a
+// worn SD card), it is moved aside and the newest good snapshot takes its
+// place; restored is then the snapshot used. Without a usable snapshot the
+// error stands: the service stays down with all valves off rather than
+// starting empty, which would open first-time setup to anyone on the LAN.
+func openStore(path, snapDir string, now time.Time, log *slog.Logger) (st *store.Store, restored string, err error) {
+	if fi, serr := os.Stat(path); serr == nil && fi.Size() == 0 && snapDir != "" {
+		// SQLite would treat an empty file as a new database.
+		if snap, _, _ := store.LatestSnapshot(snapDir); snap != "" {
+			err = fmt.Errorf("%w: database file is empty", store.ErrCorrupt)
+		}
+	}
+	if err == nil {
+		st, err = store.Open(path)
+		if err == nil || !errors.Is(err, store.ErrCorrupt) || snapDir == "" {
+			return st, "", err
+		}
+	}
+	log.Error("database damaged, restoring the newest snapshot", "db", path, "err", err)
+	restored, rerr := store.RestoreSnapshot(path, snapDir, now)
+	if rerr != nil {
+		return nil, "", errors.Join(err, rerr)
+	}
+	log.Warn("database restored from snapshot", "snapshot", restored)
+	st, err = store.Open(path)
+	return st, restored, err
 }
 
 // loadConfig reads path over the defaults ("" = defaults only). Unknown
@@ -222,7 +268,7 @@ func serve(parent context.Context, args []string, log *slog.Logger) (err error) 
 	}
 	log.Info("outputs ready", "driver", out.Name(), "count", out.Count())
 
-	st, err := store.Open(cfg.DB)
+	st, restored, err := openStore(cfg.DB, cfg.snapshotDir(), time.Now(), log)
 	if err != nil {
 		return err
 	}
@@ -244,6 +290,10 @@ func serve(parent context.Context, args []string, log *slog.Logger) (err error) 
 		return err
 	}
 	a.Version = version
+	a.SnapshotDir, a.SnapshotKeep = cfg.snapshotDir(), cfg.Snapshots.Keep
+	if restored != "" {
+		_ = st.AddEvent(time.Now(), "db_restored", map[string]any{"snapshot": filepath.Base(restored)})
+	}
 	if cfg.Clock.WaitSync {
 		a.ClockSynced = sysclock.Synced
 	}

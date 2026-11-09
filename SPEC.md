@@ -1,6 +1,6 @@
 # Sprinkler Controller — Modern OpenSprinkler Replacement: Spec
 
-Nov 7, 2026 · Teo
+Nov 7, 2026 · Teo · updated Nov 9, 2026
 
 ## Overview and goals
 
@@ -62,7 +62,8 @@ Everything OpenSprinkler 2.1.x does for a single Pi controller is in scope; the 
 | Weather | Rain sensor and soil sensor inputs, normally open / closed, on/off delays | 1 |
 | Weather | Multiple providers with fallback (see Weather) | 2 |
 | Water | Flow sensor: pulses to litres, per-run volume, flow alarm | 3 |
-| History | Run log per zone (start, duration, program, scaling), rain delay and sensor events | 1 |
+| History | Run log per zone (start, duration, program, scaling), rain delay and sensor events; minutes per zone per week | 1 |
+| Week | Next 7 days by program start; skip or restore one start | 1 (done early, planned for 2) |
 | Integrations | MQTT status and commands; notifications (ntfy / webhook) | 3 |
 | Migration | Import OpenSprinkler zones, programs, settings and logs | 0 |
 | System | Time zone, NTP sync, location, device name, password, backup/restore as JSON | 1 |
@@ -125,11 +126,11 @@ The planner is a pure function, so scheduling rules are unit-tested with fixed c
 
 ## Data model
 
-Eight SQLite tables hold all state; schema changes ship as numbered migrations inside the binary.
+Nine SQLite tables hold all state; schema changes ship as numbered migrations inside the binary.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `zones` | id, output_index, name, enabled, group_id, uses_master, ignore_rain, ignore_sensor, max_minutes, sort_order | `output_index` maps to a shift-register bit or relay pin |
+| `zones` | id, output_index, name, enabled, group_id, uses_master, ignore_rain, ignore_sensor, max_minutes, sort_order | `output_index` maps to a shift-register bit or relay pin; `max_minutes` defaults to 60 |
 | `programs` | id, name, enabled, day_rule (JSON), start_rule (JSON), season_from, season_to, weather_scaled, sort_order | Rules stored as typed JSON, validated in Go |
 | `program_zones` | program_id, zone_id, seconds, sort_order | Order = run order within the program |
 | `runs` | id, zone_id, program_id (null = manual), planned_start, start, end, planned_seconds, actual_seconds, scale_pct, litres, outcome | `outcome`: done, stopped, skipped_rain, skipped_sensor, cut_max, error |
@@ -137,6 +138,7 @@ Eight SQLite tables hold all state; schema changes ship as numbered migrations i
 | `weather_daily` | date, provider, rain_mm, t_min, t_max, humidity, wind, et0_mm, scale_pct | One row per day per provider; keeps the adjustment explainable |
 | `settings` | key, value (JSON) | Location, time zone, master zone, delays, rain delay until, active providers |
 | `users` | id, name, password_hash (argon2id), created | One admin by default; sessions in signed cookies |
+| `skips` | program_id, planned_start | Future program starts the user skipped in the Week view; pruned with the history |
 
 **Retention:** finished `runs` and `events` older than 6 months are deleted once a day (only after the clock has synced). Open runs are never pruned. This includes the imported OpenSprinkler history: the original logs stay in `~/opensprinkler-2026-11-08.tgz` and `/home/pi/OpenSprinklerGen2/logs/`.
 
@@ -163,7 +165,8 @@ Once a minute the planner turns programs into queued zone runs; the runner then 
 6. **Overlaps.** A program start while the same program is still queued is dropped (logged). A different program queues behind the current runs in the same group, as OpenSprinkler does.
 7. **Master valve.** Opens `on_delay` before the first zone that uses it and closes `off_delay` after the last one.
 8. **Manual runs** (Run zone, zone tests) do not queue behind each other: each zone gets its own manual lane, so several can run at once up to the max-zones-open limit, and any beyond it wait for a free slot. While a manual run of a zone is queued or running, scheduled runs of that zone and of its sequential group are paused, and they resume after it (and the zone delay). Stop all clears every queue.
-9. **Limits.** Each zone run is cut at the zone's `max_minutes` (default 120) even if the program asks for more. *(Open: longest real runs are 35 min — consider a tighter default such as 60.)*
+9. **Limits.** Each zone run is cut at the zone's `max_minutes` (default 60; the longest real runs are 35 min) even if the program asks for more. Migration 2 moved zones still at the old default of 120 to 60, except zones a program runs for longer than 60 min; the importer raises a zone's cap to its longest imported program run.
+10. **Skips.** A future program start can be skipped by hand (Week view). When it comes due nothing waters; its zone runs are logged as `skipped_user`.
 
 All times are stored in UTC and planned in the configured time zone (`Europe/Sofia`).
 
@@ -264,13 +267,15 @@ A valve is open only while a healthy controller is deliberately running that zon
 | Normal exit (SIGTERM, update) | All-off, then release GPIO lines |
 | Panic or crash | Deferred all-off in `main`; systemd restarts the service, which starts all-off |
 | Hang | systemd `WatchdogSec=30`: the runner pings only while its loop is alive; a missed ping kills and restarts the service. Optional Pi hardware watchdog (`/dev/watchdog`) reboots the board if the OS hangs |
-| Long run | Hard cap per zone (`max_minutes`, default 120) and a global cap of 4 h per day per zone |
+| Long run | Hard cap per zone (`max_minutes`, default 60) and a global cap of 4 h per day per zone |
 | Too many open | Configurable max zones open at once (default 2 + master) |
 | Clock not synced at boot | The Pi has no RTC. Scheduled programs wait until NTP has set the clock once (kernel `adjtimex` state); starts missed meanwhile are skipped, not run late; manual runs still work. A Home banner and `clock_unsynced`/`clock_synced` events show it. Later NTP outages don't hold programs. `[clock] wait_sync = false` turns it off |
 | Clock jump | NTP or manual time change by > 5 min re-plans the day; runs are never started twice for the same planned start |
 | GPIO write fails | Retry once, then all-off, log `error`, show a red banner |
 | Outputs ownership | Exclusive lock on the GPIO lines; the service refuses to start if another process holds them (catches OSPy or old OpenSprinkler still running) |
-| Power loss | SQLite WAL; on boot, unfinished runs are closed with outcome `error`, duration up to the last heartbeat (written every 30 s) |
+| Power loss | SQLite WAL with `synchronous=FULL` (every commit synced); on boot, unfinished runs are closed with outcome `error`, duration up to the last heartbeat (written every 30 s). Settings load key by key, so one damaged value falls back to its default. TLS files are written atomically |
+| Damaged database | `PRAGMA quick_check` at start-up. A daily checked snapshot (`VACUUM INTO`, kept 7 days) is taken while idle; a damaged or empty database is moved aside and the newest good snapshot restored (`db_restored` event). With no usable snapshot the service refuses to start (valves off) rather than starting empty |
+| Monitoring | `GET /api/health` (no login): 503 when the runner loop stalls, the database doesn't answer or the outputs are in fault; `degraded` for an unsynced clock, a sensor read error or a stale snapshot |
 
 ## Interface
 
@@ -279,10 +284,10 @@ The interface answers three questions at a glance — what is running, what runs
 | Screen | Contents |
 | --- | --- |
 | Home | Running zones with countdown and Stop; next 3 planned runs with scaled duration; today's watering level and why; rain delay and sensor state; big **Run zone** and **Stop all** buttons |
-| Week | Calendar of the next 7 days, a bar per run, coloured by program, overlaps highlighted; tap a bar to see or skip it |
+| Week | Next 7 days: a 24 h bar per day with one segment per program start, coloured by program, overlaps highlighted; tap a start to see its zones, skip it or restore it. Reached from Programs (List / Week) and from Home's next runs |
 | Programs | List with a one-line summary ("Every 2 days at 06:00 · Flowers 30 min → Lawn 35 min"); editor with day rule, start rule, season, zones in drag-to-order list, live preview of the next 5 runs |
 | Zones | Name, group, master, ignore rain/sensor, max minutes, test button (run 1 min) |
-| History | Run log filterable by zone, program, outcome; minutes (and litres, phase 3) per zone per week |
+| History | Run log filterable by zone, program, outcome; minutes (and litres, phase 3) per zone per week for 6, 12 or 26 weeks, with totals per zone and per week |
 | Weather | Daily scale % with the inputs behind it, per provider; provider status; rain delay control |
 | Settings | Location (map pick or coordinates), time zone, providers and method, hardware info, users, backup/restore, update |
 
@@ -296,18 +301,18 @@ The interface answers three questions at a glance — what is running, what runs
 
 ## Phased plan
 
-The new controller first runs beside OpenSprinkler without touching valves, and takes over only after its plan matches OpenSprinkler's for two weeks.
+The plan was to run beside OpenSprinkler without touching valves and take over after two matching weeks. In practice the Shadow run was skipped at the user's request and cutover happened off-season, on 2026-11-08.
 
-| Phase | Scope | Gate to next phase |
-| --- | --- | --- |
-| 0 — Import | Go skeleton, SQLite schema, `sim` driver; importer reads `nvm.dat`, `stns.dat` and `logs/` from a copy | Imported zones, programs and 143 days of runs match what the OpenSprinkler UI shows |
-| 1 — Core | Planner, runner, safety rules, `shiftreg` and `gpiorelay` drivers, rain sensor, manual runs, Home/Programs/Zones/History screens | All planner tests pass (incl. DST and sunrise); 72 h soak on a spare Pi with LEDs or the sim driver |
-| Shadow | Runs on `sprinklerpi` with `sim` driver on another port; logs what it would do | Its planned runs equal OpenSprinkler's actual runs for 14 days (start ±1 min, duration ±1 s) |
-| Cutover | Stop and disable OpenSprinkler and OSPy; switch driver to `shiftreg`; keep the old binary and data for rollback | One week of correct watering; rollback tested once (stop new service, start OpenSprinkler) |
-| 2 — Weather | Providers, adjustment methods, fallback chain, Weather and Week screens | Scale % from Open-Meteo ET within 10 points of the OpenSprinkler service over 14 days, or the difference explained |
-| 3 — Extras | Flow sensor, local weather station, MQTT, notifications, Bulgarian translation polish | Per feature |
+| Phase | Scope | Gate to next phase | Status |
+| --- | --- | --- | --- |
+| 0 — Import | Go skeleton, SQLite schema, `sim` driver; importer reads `nvm.dat`, `stns.dat` and `logs/` from a copy | Imported zones, programs and 143 days of runs match what the OpenSprinkler UI shows | Done 2026-11-08 |
+| 1 — Core | Planner, runner, safety rules, `shiftreg` and `gpiorelay` drivers, rain sensor, manual runs, Home/Programs/Zones/History screens | All planner tests pass (incl. DST and sunrise); 72 h soak on a spare Pi with LEDs or the sim driver | Done 2026-11-08 (tests pass; the 72 h soak was not run) |
+| Shadow | Runs on `sprinklerpi` with `sim` driver on another port; logs what it would do | Its planned runs equal OpenSprinkler's actual runs for 14 days (start ±1 min, duration ±1 s) | Skipped (user's decision; cutover off-season, all programs disabled) — closed |
+| Cutover | Stop and disable OpenSprinkler and OSPy; switch driver to `shiftreg`; keep the old binary and data for rollback | One week of correct watering; rollback tested once (stop new service, start OpenSprinkler) | Done: cutover 2026-11-08; zone tests in the garden and rollback test confirmed 2026-11-09 |
+| 2 — Weather | Providers, adjustment methods, fallback chain, Weather screen (Week screen already built) | Scale % from Open-Meteo ET within 10 points of the OpenSprinkler service over 14 days, or the difference explained | Next |
+| 3 — Extras | Flow sensor, local weather station, MQTT, notifications, Bulgarian translation polish | Per feature | Not started |
 
-Cutover happens outside the watering season or on a dry week, so a mistake costs little.
+Cutover happened outside the watering season (2026-11-08, all programs disabled), so a mistake cost little. The first real watering will be in spring 2027.
 
 ## Open questions
 
@@ -317,6 +322,6 @@ Cutover happens outside the watering season or on a dry week, so a mistake costs
 - [x] Stay on the Pi 1 after cutover, or move to a Pi Zero 2 W on a current OS? Decided 2026-11-09: stay on the Pi 1 with Raspbian 10 for now, knowing the OS is out of support.
 - [ ] Access from outside the house: LAN only, or through a VPN such as Tailscale / WireGuard?
 - [ ] Which adjustment method should be the default once weather lands: OpenSprinkler service (Zimmerman) or ET-based from Open-Meteo?
-- [ ] Per-zone hard cap default: 120 min, or tighter (60)? (Implemented as 120 for now; it can be edited per zone.)
-- [ ] OpenSprinkler's clock: did it stay at a fixed UTC+2 through the summer? This decides how the imported June–October run times convert, and how Shadow compares. Check one summer day against a memory of real watering times, or watch for the change at the next DST switch.
-- [ ] Project name and where the code lives (GitHub, self-hosted Git).
+- [x] Per-zone hard cap default: 60 min (decided 2026-11-09); still editable per zone.
+- [ ] OpenSprinkler's clock: did it stay at a fixed UTC+2 through the summer? This decides how the imported June–October run times convert, (Shadow was skipped, so only the history is affected). Check one summer day against a memory of real watering times, or watch for the change at the next DST switch.
+- [x] Project name and where the code lives: public on GitHub as `teodoryantcheff/sprinkler-controller` since 2026-11-08.
