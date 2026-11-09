@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"sprinkler/internal/core"
@@ -91,6 +92,17 @@ type Runner struct {
 	OnChange func()
 	// Alive is called after every successful tick (systemd watchdog).
 	Alive func()
+
+	lastTick atomic.Pointer[time.Time] // for the health check
+}
+
+// LastTick returns when the runner loop last completed a tick (zero
+// before the first one).
+func (r *Runner) LastTick() time.Time {
+	if t := r.lastTick.Load(); t != nil {
+		return *t
+	}
+	return time.Time{}
 }
 
 // New creates a runner and switches every output off.
@@ -480,6 +492,7 @@ func (r *Runner) Tick(now time.Time) {
 	if changed {
 		r.changed()
 	}
+	r.lastTick.Store(&now)
 	if r.Alive != nil {
 		r.Alive()
 	}

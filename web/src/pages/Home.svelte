@@ -28,7 +28,7 @@
   let busy = $state(false)
 
   const runnable = $derived(cache.zones.filter((z) => z.enabled))
-  const maxMinutes = $derived(cache.zones.find((z) => z.id === pickZone)?.max_minutes ?? 120)
+  const maxMinutes = $derived(cache.zones.find((z) => z.id === pickZone)?.max_minutes ?? 60)
   const runningZones = $derived(new Set((s?.runner.running || []).map((r) => r.zone_id)))
 
   async function act(fn: () => Promise<unknown>, ok?: string) {
@@ -194,7 +194,10 @@
     </div>
   {/if}
 
-  <h2><Icon name="clock" />{t('next_runs')}</h2>
+  <h2 class="row spread">
+    <span class="row" style="gap:8px"><Icon name="clock" />{t('next_runs')}</span>
+    <a class="small" href="#/week"><Icon name="calendar" size={18} />{t('week_view')}</a>
+  </h2>
   <div class="card">
     {#if s.next.length === 0}
       <span class="muted">{t('no_next')}</span>

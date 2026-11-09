@@ -32,7 +32,17 @@
 
 <header class="top">
   <h1>{t('programs')}</h1>
-  <button class="primary" onclick={() => go('/programs/new')}><Icon name="plus" />{t('new_program')}</button>
+  <div class="row">
+    <div class="seg" role="group">
+      <button aria-pressed="true" aria-label={t('list_view')} title={t('list_view')}
+        ><Icon name="list" size={20} /></button
+      >
+      <button aria-pressed="false" aria-label={t('week_view')} title={t('week_view')} onclick={() => go('/week')}
+        ><Icon name="calendar" size={20} /></button
+      >
+    </div>
+    <button class="primary" onclick={() => go('/programs/new')}><Icon name="plus" />{t('new_program')}</button>
+  </div>
 </header>
 
 {#each cache.programs as p (p.id)}

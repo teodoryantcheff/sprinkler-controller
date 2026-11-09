@@ -62,7 +62,7 @@
           uses_master: false,
           ignore_rain: false,
           ignore_sensor: false,
-          max_minutes: 120,
+          max_minutes: 60,
           sort_order: free,
         }
     dialog.showModal()
