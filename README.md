@@ -7,10 +7,12 @@ It has been watering a real garden since November 2026.
 ## Features
 
 - Zones, programs (weekday, interval and odd/even days; fixed, repeating and sunrise/sunset start times), manual runs and run history
+- A week view of planned starts (skip or restore one start), and minutes watered per zone per week
+- Built for power cuts: synced writes, integrity check at start-up, daily database snapshots with automatic restore, and a `/api/health` endpoint for monitoring
 - Rain delay and a rain sensor (normally open or closed) with debouncing
 - Valve drivers for a 74HC595 shift-register board, plain GPIO relays, and a simulator for development
 - Safety first: only one component switches valves, every exit path closes them all, and the service refuses to start if another process holds the GPIO lines
-- A mobile-first web UI (installable as a phone app, about 43 KB gzipped) with live updates, login, and HTTPS from a built-in local certificate authority
+- A mobile-first web UI (installable as a phone app, under 100 KB gzipped) with live updates, login, and HTTPS from a built-in local certificate authority
 - An importer for settings, programs and run history from an existing install
 
 Weather-based adjustment from several providers is planned (Phase 2 in [`SPEC.md`](SPEC.md)).

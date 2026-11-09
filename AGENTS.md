@@ -18,6 +18,18 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
   - Updating the Pi: `make deploy` (`deploy/update.sh`, see `docs/raspberry-pi.md#updating`). It installs over the current binary and config (no `.prev` copies) and refuses while anything is watering or queued (`sprinkler busy`): a restart closes all valves. `make deploy-check` copies to `/tmp` on the Pi and checks without installing. Running either one on the Pi needs the user's go-ahead.
 - **Cutover gate closed 2026-11-09** (user confirmed): zone tests in the garden and the rollback test are done.
 - Since 2026-11-09: scheduled programs wait for the first NTP sync after start-up (no RTC), and finished runs and events older than 6 months are pruned daily. This includes the imported 2026 OpenSprinkler history; the raw logs stay in the backup tgz and on the Pi.
+- Added 2026-11-09 (branch `worktree-week-health-powerloss`; **not deployed to the Pi yet**):
+  - Week view: next 7 days, with skip and restore per program start (new `skips` table, outcome `skipped_user`).
+  - History weekly totals: 6/12/26 weeks, with totals per zone and per week.
+  - `GET /api/health` (no login; 503 = can't water).
+  - Per-zone cap default 60 min. Migration 2 lowers zones still at 120, unless a program runs them for longer than 60 min.
+  - Power-loss hardening:
+    - `synchronous=FULL` and a `quick_check` at start-up.
+    - Daily checked snapshots in `/var/lib/sprinkler/snapshots` (7 kept), with automatic restore of a damaged DB from the newest good one.
+    - Atomic TLS file writes.
+    - Settings load key by key.
+  - Details are in `docs/raspberry-pi.md#power-loss-and-the-sd-card`. The OS-level steps there (`fsck.repair`, `noatime`) are recommendations only and not applied.
+- Phase status: 0, 1 and Cutover are done, and Shadow was skipped and is closed (see the table in `SPEC.md`). Next is Phase 2 (weather). The spec's 72 h soak test was never run.
 - Runbook (install, stash, rollback) is in `docs/raspberry-pi.md`; dev server docs are in `docs/development.md`, phone setup in `docs/phone.md`. Remaining open questions are at the end of `SPEC.md`.
 
 ## The live controller — handle with care
