@@ -46,9 +46,14 @@ type Bundle struct {
 }
 
 // Ensure loads or creates the CA and a server certificate in dir. The
-// server certificate is re-issued when it nears expiry or when hosts
-// (IP addresses and DNS names) change; the CA is kept, so phones that
-// trust it keep working.
+// CA is kept, so phones that trust it keep working.
+//
+// Names are only ever added: the certificate is reused while it covers
+// every wanted host, and a re-issue (new host, or near expiry) keeps the
+// names the old certificate had. At boot the service can start before
+// DHCP has given the Pi its address; dropping that address would break
+// HTTPS by IP until the next restart. To drop old names, delete
+// server.crt and restart.
 func Ensure(dir string, hosts []string, now time.Time) (*Bundle, error) {
 	if len(hosts) == 0 {
 		return nil, errors.New("tls: no hosts")
@@ -63,9 +68,12 @@ func Ensure(dir string, hosts []string, now time.Time) (*Bundle, error) {
 	want := normalize(hosts)
 	if c, err := tls.LoadX509KeyPair(filepath.Join(dir, certFile), filepath.Join(dir, keyFile)); err == nil {
 		leaf, perr := x509.ParseCertificate(c.Certificate[0])
-		if perr == nil && leaf.CheckSignatureFrom(caCert) == nil && now.Add(renewBefore).Before(leaf.NotAfter) &&
-			slices.Equal(normalize(certHosts(leaf)), want) {
-			return &Bundle{Cert: c, CAPEM: caPEM, Hosts: want}, nil
+		if perr == nil && leaf.CheckSignatureFrom(caCert) == nil {
+			have := normalize(certHosts(leaf))
+			if now.Add(renewBefore).Before(leaf.NotAfter) && covers(have, want) {
+				return &Bundle{Cert: c, CAPEM: caPEM, Hosts: have}, nil
+			}
+			want = normalize(append(want, have...)) // re-issue: keep the old names
 		}
 	}
 	c, err := issue(dir, caCert, caPriv, want, now)
@@ -84,6 +92,16 @@ func normalize(hosts []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// covers reports whether every name in want is in have.
+func covers(have, want []string) bool {
+	for _, h := range want {
+		if !slices.Contains(have, h) {
+			return false
+		}
+	}
+	return true
 }
 
 func certHosts(c *x509.Certificate) []string {

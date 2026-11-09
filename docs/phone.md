@@ -9,4 +9,4 @@
    - **Android (Chrome):** open the **https** address. An **Install app** button appears on Home and in Settings; the ⋮ menu → Install app also works. Over plain http, Chrome only makes a browser shortcut.
    - **iPhone (Safari):** Share → Add to Home Screen. This works over http or https and opens full-screen like an app.
 
-The certificate authority lives in `/var/lib/sprinkler/tls/` on the Pi (10 years). The server certificate (800 days, the most iOS accepts) is renewed on its own a month before it expires, and re-issued at start-up if the Pi's IP address or name changes. Phones keep trusting it, because the authority stays the same.
+The certificate authority lives in `/var/lib/sprinkler/tls/` on the Pi (10 years). The server certificate (800 days, the most iOS accepts) is renewed on its own a month before it expires, and re-issued at start-up when the Pi gains a new IP address or name. Names are only added, never dropped, so a boot before the network is up (no address yet) keeps the certificate as it was. To drop old names, delete `server.crt` there and restart the service. Phones keep trusting it, because the authority stays the same.
