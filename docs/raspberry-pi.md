@@ -177,10 +177,13 @@ Config (`/etc/sprinkler/sprinkler.toml`, all optional):
 
 Watch it from the laptop or a monitor: `curl -fsS http://192.168.1.20/api/health` returns `503` when the controller can't water and `"degraded"` when the snapshot is older than 48 h.
 
-Recommended OS settings (not applied yet; each needs a go-ahead on the Pi):
+OS settings (checked on the Pi 2026-11-09; both were already set by Raspbian, nothing changed):
 
-- `fsck.repair=yes` in `/boot/cmdline.txt`, so the root file system is repaired at boot after a cut instead of mounting read-only. Check first: `grep -o 'fsck.repair=[a-z]*' /boot/cmdline.txt`.
-- `noatime` on the root mount in `/etc/fstab` to cut SD writes.
+- `fsck.repair=yes` in `/boot/cmdline.txt`, so the root file system is repaired at boot after a cut instead of mounting read-only. Check: `grep -o 'fsck.repair=[a-z]*' /boot/cmdline.txt`.
+- `noatime` on the root mount (`/etc/fstab`: `defaults,noatime`, pass 1) to cut SD writes. Check: `findmnt -no OPTIONS /`.
+
+Still worth doing by hand:
+
 - Copy snapshots off the card now and then; a dying card takes its snapshots with it. The directory belongs to the `sprinkler` user, hence `sudo` on the Pi side: `rsync -a --rsync-path="sudo rsync" pi@192.168.1.20:/var/lib/sprinkler/snapshots/ ~/backups/sprinkler-snapshots/` (read-only on the Pi).
 
 ## Rollback to OpenSprinkler
