@@ -131,8 +131,6 @@ The gate to finish the Cutover phase is one week of correct watering, and the ro
 
 The installed config (`deploy/sprinklerpi.toml`) serves HTTP on port 80, as OpenSprinkler did. HTTPS is off: it needs a certificate of your own in `[tls]` (`listen`, `cert`, `key`; see the comment in the config), because there is no built-in certificate authority any more. The unit grants `CAP_NET_BIND_SERVICE`, so the service can bind ports 80 and 443 without running as root.
 
-The Pi still holds the old local CA in `/var/lib/sprinkler/tls/` from before 2026-11-10. Nothing reads it now. After the first update without it, remove it (with the go-ahead): `sudo rm -r /var/lib/sprinkler/tls`.
-
 ## Updating
 
 From the laptop, with the SSH key loaded (`ssh-add`):

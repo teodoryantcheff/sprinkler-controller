@@ -29,7 +29,7 @@ A modern replacement for OpenSprinkler 2.1.8 on a home irrigation Raspberry Pi (
     - Atomic TLS file writes.
     - Settings load key by key.
   - Details are in `docs/raspberry-pi.md#power-loss-and-the-sd-card`. `fsck.repair=yes` and root `noatime` were already set on the Pi (checked 2026-11-09).
-- 2026-11-10: built-in local CA removed (code, UI, `/ca.crt`, `[tls] hosts`/`dir`). HTTPS now needs `[tls] cert`/`key`; `deploy/sprinklerpi.toml` has no `[tls]`, so HTTPS is off. No phone had the CA installed. Not deployed yet: the Pi still serves HTTPS :443 from the old CA until the next `make deploy`; then `/var/lib/sprinkler/tls` can be deleted (go-ahead needed). Plan: Let's Encrypt for the public name (port 80 forwarded), not committed to the public repo.
+- 2026-11-10: built-in local CA removed (code, UI, `/ca.crt`, `[tls] hosts`/`dir`). HTTPS now needs `[tls] cert`/`key`; `deploy/sprinklerpi.toml` has no `[tls]`, so HTTPS is off. No phone had the CA installed. Deployed 2026-11-10 (`bc7c749`, `/api/health` ok, only :80 listening) and `/var/lib/sprinkler/tls` deleted on the Pi. Plan: Let's Encrypt for the public name (port 80 forwarded), not committed to the public repo.
 - Phase status: 0, 1 and Cutover are done, and Shadow was skipped and is closed (see the table in `SPEC.md`). Next is Phase 2 (weather). The spec's 72 h soak test was never run.
 - Runbook (install, stash, rollback) is in `docs/raspberry-pi.md`; dev server docs are in `docs/development.md`, phone setup in `docs/phone.md`. Remaining open questions are at the end of `SPEC.md`.
 
