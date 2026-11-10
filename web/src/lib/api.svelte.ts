@@ -124,7 +124,6 @@ export interface Me {
   language: string
   device_name: string
   https: boolean
-  ca_available: boolean
 }
 
 export const session = $state({
@@ -132,7 +131,6 @@ export const session = $state({
   loggedIn: false,
   setupRequired: false,
   deviceName: '',
-  caAvailable: false,
 })
 
 export class ApiError extends Error {
@@ -219,6 +217,5 @@ export async function checkSession() {
   session.loggedIn = me.logged_in
   session.setupRequired = me.setup_required
   session.deviceName = me.device_name
-  session.caAvailable = me.ca_available
   return me
 }

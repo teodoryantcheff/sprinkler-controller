@@ -14,7 +14,6 @@ export const install = $state({
     (navigator as unknown as { standalone?: boolean }).standalone === true,
   ios: /iPhone|iPad|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1),
   android: /Android/.test(ua),
-  secure: window.isSecureContext,
 })
 
 window.addEventListener('beforeinstallprompt', (e) => {

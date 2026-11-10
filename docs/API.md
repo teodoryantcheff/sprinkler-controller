@@ -2,7 +2,7 @@
 
 The JSON API the web UI uses. It is not compatible with the OpenSprinkler API. The source of truth is `internal/api/api.go`; update this file when a route or a JSON shape changes.
 
-- Base URL: `http://<host>/api/` (and `https://` when TLS is configured).
+- Base URL: `http://<host>/api/` (and `https://` when `[tls]` has a certificate).
 - All bodies are JSON (UTF-8). Every JSON response carries `Cache-Control: no-store`.
 - Times are RFC 3339 in UTC (`2026-11-08T05:30:00Z`). Durations are whole seconds unless the field name says otherwise (`_min`, `_minutes`, `hours`).
 - IDs are integers. `output_index` is 0-based (output 1 is `0`).
@@ -93,7 +93,6 @@ curl -b jar -H "$H" -d '{}' http://sprinklerpi/api/stop
 | POST | `/api/restore` | yes | Restore backup |
 | GET | `/api/docs` | open | This reference as HTML |
 | GET | `/api/docs.md` | open | This reference as Markdown |
-| GET | `/ca.crt` | open | Local CA certificate |
 
 Every other path outside `/api/` serves the embedded web UI. Unknown paths get `index.html` so client-side routes work.
 
@@ -108,12 +107,11 @@ Every other path outside `/api/` serves the embedded web UI. Unknown paths get `
   "setup_required": false,
   "language": "en",
   "device_name": "Sprinkler",
-  "https": false,
-  "ca_available": true
+  "https": false
 }
 ```
 
-`user` is `""` when logged out and `"lan"` for LAN access. `setup_required` is true while there are no users. `ca_available` tells you whether `/ca.crt` exists.
+`user` is `""` when logged out and `"lan"` for LAN access. `setup_required` is true while there are no users. `https` is true when the request came over HTTPS.
 
 ### `POST /api/setup` (open)
 
@@ -530,7 +528,3 @@ The backup covers settings, zones and programs, but not users, history or events
 ### `POST /api/restore`
 
 The body is a backup (`version` must be 1). It is validated first with the same rules as the zone, program and settings endpoints (`400` names the bad item, and nothing is stopped). It then **stops all runs** and replaces all zones and programs and the settings in one transaction. Logs a `restore` event.
-
-## `GET /ca.crt` (open)
-
-When HTTPS uses the built-in local CA, this downloads the CA certificate (`sprinkler-ca.crt`), so phones can install it and trust the HTTPS certificate. Returns `404` otherwise.

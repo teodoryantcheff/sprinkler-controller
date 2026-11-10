@@ -129,7 +129,9 @@ The service starts with every valve off. Then, in the UI at http://192.168.1.20:
 
 The gate to finish the Cutover phase is one week of correct watering, and the rollback below tested once.
 
-The installed config (`deploy/sprinklerpi.toml`) serves HTTP on port 80, as OpenSprinkler did, and HTTPS on 443 (`[tls] listen`). The unit grants `CAP_NET_BIND_SERVICE`, so the service binds those ports without running as root.
+The installed config (`deploy/sprinklerpi.toml`) serves HTTP on port 80, as OpenSprinkler did. HTTPS is off: it needs a certificate of your own in `[tls]` (`listen`, `cert`, `key`; see the comment in the config), because there is no built-in certificate authority any more. The unit grants `CAP_NET_BIND_SERVICE`, so the service can bind ports 80 and 443 without running as root.
+
+The Pi still holds the old local CA in `/var/lib/sprinkler/tls/` from before 2026-11-10. Nothing reads it now. After the first update without it, remove it (with the go-ahead): `sudo rm -r /var/lib/sprinkler/tls`.
 
 ## Updating
 
@@ -163,7 +165,6 @@ What the service does by itself:
 - **Automatic restore.** If the database fails its check (or is an empty file) at start-up, it is moved aside as `sprinkler.db.corrupt-<time>` (with its `-wal`/`-shm`) and the newest snapshot that passes the check takes its place. A `db_restored` event shows in History → Events. Runs since that snapshot are lost; zones, programs and settings rarely change in a day.
 - **No snapshot, no start.** Without a usable snapshot the service fails to start, with all valves off, rather than starting on an empty database (that would open first-time setup to anyone on the LAN). Restore by hand from `~/opensprinkler-2026-11-08.tgz` + import, or from a JSON backup (Settings → Backup).
 - **Run recovery.** Runs left open by the cut are closed as `error` with the duration from the last heartbeat (`crash_recovery` event). Nothing resumes watering by itself.
-- **Torn-file safety.** The TLS CA and certificate are written atomically (temp file, sync, rename), so a cut can't leave a half-written CA that would force phones to trust a new one.
 - **Damaged settings** keep their defaults one key at a time instead of stopping start-up.
 
 Config (`/etc/sprinkler/sprinkler.toml`, all optional):

@@ -3,11 +3,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"io"
 	"log/slog"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -34,7 +39,7 @@ func TestDeployConfigs(t *testing.T) {
 	if pi.Inputs.Rain.Pin != 14 || pi.Inputs.Rain.Normally != "open" || pi.Inputs.Rain.Sim {
 		t.Fatalf("Pi rain sensor: %+v", pi.Inputs.Rain)
 	}
-	if pi.Listen != ":80" || pi.TLS.Listen != ":443" || pi.DB != "/var/lib/sprinkler/sprinkler.db" {
+	if pi.Listen != ":80" || pi.TLS.Listen != "" || pi.DB != "/var/lib/sprinkler/sprinkler.db" {
 		t.Fatalf("Pi listen/db: %q %q %q", pi.Listen, pi.TLS.Listen, pi.DB)
 	}
 	if !pi.Clock.WaitSync {
@@ -105,39 +110,62 @@ func TestOpenOutputs(t *testing.T) {
 	}
 }
 
-func TestTLSConfigLocalCA(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.DB = filepath.Join(t.TempDir(), "s.db")
-	cfg.TLS.Hosts = []string{"sprinklerpi", "192.0.2.20"}
-	tc, caPEM, hosts, err := tlsConfig(cfg)
+// testCert writes a throwaway self-signed certificate for 127.0.0.1.
+func testCert(t *testing.T) (certPath, keyPath string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tc.Certificates) != 1 || len(hosts) == 0 {
-		t.Fatalf("certs %d hosts %v", len(tc.Certificates), hosts)
+	tpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1)},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
-	blk, _ := pem.Decode(caPEM)
-	if blk == nil {
-		t.Fatal("CA PEM missing")
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
 	}
-	ca, err := x509.ParseCertificate(blk.Bytes)
-	if err != nil || !ca.IsCA {
-		t.Fatalf("CA: %v", err)
+	kder, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(cfg.DB), "tls")); err != nil {
-		t.Fatalf("CA dir defaults to <db dir>/tls: %v", err)
+	dir := t.TempDir()
+	certPath, keyPath = filepath.Join(dir, "c.pem"), filepath.Join(dir, "k.pem")
+	if err := os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certPath, keyPath
+}
+
+func TestTLSConfig(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.TLS.Listen = ":443"
+	if _, err := tlsConfig(cfg); err == nil {
+		t.Fatal("listen without cert/key must fail: there is no built-in CA")
+	}
+	cfg.TLS.Cert, cfg.TLS.Key = testCert(t)
+	tc, err := tlsConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tc.Certificates) != 1 || tc.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("certs %d min %x", len(tc.Certificates), tc.MinVersion)
 	}
 	cfg.TLS.Cert, cfg.TLS.Key = "/nonexistent.crt", "/nonexistent.key"
-	if _, _, _, err := tlsConfig(cfg); err == nil {
-		t.Fatal("missing own certificate must fail")
+	if _, err := tlsConfig(cfg); err == nil {
+		t.Fatal("missing certificate must fail")
 	}
 }
 
-func TestDefaultHostsAndServer(t *testing.T) {
-	h := defaultHosts()
-	if h[0] != "localhost" || h[1] != "127.0.0.1" {
-		t.Fatalf("hosts %v", h)
-	}
+func TestServerLimits(t *testing.T) {
 	srv := newServer(nil, nil)
 	if srv.ReadHeaderTimeout == 0 || srv.MaxHeaderBytes == 0 || srv.WriteTimeout != 0 {
 		t.Fatal("server limits: header timeout and size set, no write timeout (SSE)")
@@ -159,10 +187,11 @@ func freePort(t *testing.T) string {
 func TestServeStartsAndStops(t *testing.T) {
 	dir := t.TempDir()
 	httpAddr, httpsAddr := freePort(t), freePort(t)
+	certPath, keyPath := testCert(t)
 	conf := filepath.Join(dir, "c.toml")
 	body := "listen = \"" + httpAddr + "\"\ndb = \"" + filepath.Join(dir, "s.db") + "\"\n" +
 		"[outputs]\ndriver = \"sim\"\n[inputs.rain]\nsim = true\n[clock]\nwait_sync = false\n" +
-		"[tls]\nlisten = \"" + httpsAddr + "\"\nhosts = [\"127.0.0.1\"]\n"
+		"[tls]\nlisten = \"" + httpsAddr + "\"\ncert = \"" + certPath + "\"\nkey = \"" + keyPath + "\"\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +208,7 @@ func TestServeStartsAndStops(t *testing.T) {
 		return resp.StatusCode, nil
 	}
 	insecure := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // throwaway local CA
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // throwaway self-signed cert
 	}}
 	plain := &http.Client{Timeout: 2 * time.Second}
 	var code int

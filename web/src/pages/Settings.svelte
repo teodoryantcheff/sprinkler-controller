@@ -300,16 +300,6 @@
       {:else}
         <div>{t('android_steps')}</div>
       {/if}
-      {#if !install.secure && session.caAvailable}
-        <div class="muted">{t('https_hint')}</div>
-      {/if}
-    {/if}
-    {#if session.caAvailable}
-      <div class="row wrap-row">
-        {#if !install.secure}<a class="btn" href={'https://' + location.hostname + '/'}>{t('open_https')}</a>{/if}
-        <a class="btn" href="/ca.crt" download="sprinkler-ca.crt">{t('download_ca')}</a>
-      </div>
-      <div class="muted">{install.ios ? t('ca_steps_ios') : t('ca_steps_android')}</div>
     {/if}
   </div>
 

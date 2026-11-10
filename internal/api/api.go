@@ -35,25 +35,10 @@ type Server struct {
 	log     *slog.Logger
 	handler http.Handler
 	outputs int
-	caPEM   []byte
 
 	secretMu sync.Mutex    // guards creating/rotating the session secret
 	hashSem  chan struct{} // bounds concurrent argon2 runs
 	logins   loginLimiter
-}
-
-// SetCA makes the local CA certificate downloadable at /ca.crt, so phones
-// can trust the HTTPS certificate.
-func (s *Server) SetCA(pem []byte) { s.caPEM = pem }
-
-func (s *Server) caCert(w http.ResponseWriter, r *http.Request) {
-	if len(s.caPEM) == 0 {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-	w.Header().Set("Content-Disposition", `attachment; filename="sprinkler-ca.crt"`)
-	_, _ = w.Write(s.caPEM)
 }
 
 // New builds the handler.
@@ -168,7 +153,6 @@ func pathID(r *http.Request) (int64, error) {
 }
 
 func (s *Server) routes(m *http.ServeMux) {
-	m.HandleFunc("GET /ca.crt", s.caCert)
 	m.HandleFunc("GET /api/docs", s.apiDocs)
 	m.HandleFunc("GET /api/docs.md", s.apiDocsMarkdown)
 	m.HandleFunc("GET /api/health", s.health)
@@ -261,7 +245,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) (any, error) {
 	st, _, _, _ := s.app.Snapshot()
 	return map[string]any{
 		"user": u, "logged_in": ok, "setup_required": n == 0, "language": st.Language, "device_name": st.DeviceName,
-		"https": r.TLS != nil, "ca_available": len(s.caPEM) > 0,
+		"https": r.TLS != nil,
 	}, nil
 }
 

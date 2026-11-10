@@ -28,7 +28,6 @@ import (
 	"sprinkler/internal/runner"
 	"sprinkler/internal/store"
 	"sprinkler/internal/sysclock"
-	"sprinkler/internal/tlscert"
 
 	"github.com/BurntSushi/toml"
 )
@@ -70,11 +69,9 @@ type Config struct {
 		Keep int    `toml:"keep"` // days kept (default 7)
 	} `toml:"snapshots"`
 	TLS struct {
-		Listen string   `toml:"listen"` // e.g. ":443"; empty = no HTTPS
-		Hosts  []string `toml:"hosts"`  // names/IPs for the certificate; default: hostname(.local) + current IPs
-		Dir    string   `toml:"dir"`    // where the local CA and certificate live; default: <db dir>/tls
-		Cert   string   `toml:"cert"`   // optional: your own certificate instead of the local CA
-		Key    string   `toml:"key"`
+		Listen string `toml:"listen"` // e.g. ":443"; empty = no HTTPS
+		Cert   string `toml:"cert"`   // certificate chain (PEM); required with listen
+		Key    string `toml:"key"`    // its private key (PEM)
 	} `toml:"tls"`
 }
 
@@ -346,18 +343,17 @@ func serve(parent context.Context, args []string, log *slog.Logger) (err error) 
 		}
 	}()
 	if cfg.TLS.Listen != "" {
-		tcfg, caPEM, hosts, err := tlsConfig(cfg)
+		tcfg, err := tlsConfig(cfg)
 		if err != nil {
 			return fail(fmt.Errorf("tls: %w", err))
 		}
-		handler.SetCA(caPEM)
 		tsrv := newServer(handler, tcfg)
 		tln, err := net.Listen("tcp", cfg.TLS.Listen)
 		if err != nil {
 			return fail(err)
 		}
 		servers = append(servers, tsrv)
-		log.Info("listening https", "addr", tln.Addr().String(), "hosts", hosts)
+		log.Info("listening https", "addr", tln.Addr().String(), "cert", cfg.TLS.Cert)
 		go func() {
 			if err := tsrv.ServeTLS(tln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Error("https", "err", err)
@@ -390,45 +386,17 @@ func newServer(h http.Handler, tcfg *tls.Config) *http.Server {
 	}
 }
 
-// tlsConfig loads the configured certificate, or the local CA's.
-func tlsConfig(cfg Config) (*tls.Config, []byte, []string, error) {
-	if cfg.TLS.Cert != "" {
-		c, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return &tls.Config{Certificates: []tls.Certificate{c}, MinVersion: tls.VersionTLS12}, nil, nil, nil
+// tlsConfig loads the configured certificate. There is no built-in CA:
+// HTTPS needs a certificate from elsewhere.
+func tlsConfig(cfg Config) (*tls.Config, error) {
+	if cfg.TLS.Cert == "" || cfg.TLS.Key == "" {
+		return nil, errors.New("[tls] listen needs cert and key")
 	}
-	dir := cfg.TLS.Dir
-	if dir == "" {
-		dir = filepath.Join(filepath.Dir(cfg.DB), "tls")
-	}
-	hosts := cfg.TLS.Hosts
-	if len(hosts) == 0 {
-		hosts = defaultHosts()
-	}
-	b, err := tlscert.Ensure(dir, hosts, time.Now())
+	c, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
-	return &tls.Config{Certificates: []tls.Certificate{b.Cert}, MinVersion: tls.VersionTLS12}, b.CAPEM, b.Hosts, nil
-}
-
-// defaultHosts: the hostname, hostname.local (mDNS), localhost and every
-// non-link-local address the machine has now.
-func defaultHosts() []string {
-	hosts := []string{"localhost", "127.0.0.1"}
-	if h, err := os.Hostname(); err == nil && h != "" {
-		hosts = append(hosts, h, h+".local")
-	}
-	if addrs, err := net.InterfaceAddrs(); err == nil {
-		for _, a := range addrs {
-			if ipn, ok := a.(*net.IPNet); ok && !ipn.IP.IsLoopback() && !ipn.IP.IsLinkLocalUnicast() {
-				hosts = append(hosts, ipn.IP.String())
-			}
-		}
-	}
-	return hosts
+	return &tls.Config{Certificates: []tls.Certificate{c}, MinVersion: tls.VersionTLS12}, nil
 }
 
 // sdNotify sends a message to systemd if NOTIFY_SOCKET is set.

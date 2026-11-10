@@ -273,7 +273,7 @@ A valve is open only while a healthy controller is deliberately running that zon
 | Clock jump | NTP or manual time change by > 5 min re-plans the day; runs are never started twice for the same planned start |
 | GPIO write fails | Retry once, then all-off, log `error`, show a red banner |
 | Outputs ownership | Exclusive lock on the GPIO lines; the service refuses to start if another process holds them (catches OSPy or old OpenSprinkler still running) |
-| Power loss | SQLite WAL with `synchronous=FULL` (every commit synced); on boot, unfinished runs are closed with outcome `error`, duration up to the last heartbeat (written every 30 s). Settings load key by key, so one damaged value falls back to its default. TLS files are written atomically |
+| Power loss | SQLite WAL with `synchronous=FULL` (every commit synced); on boot, unfinished runs are closed with outcome `error`, duration up to the last heartbeat (written every 30 s). Settings load key by key, so one damaged value falls back to its default |
 | Damaged database | `PRAGMA quick_check` at start-up. A daily checked snapshot (`VACUUM INTO`, kept 7 days) is taken while idle; a damaged or empty database is moved aside and the newest good snapshot restored (`db_restored` event). With no usable snapshot the service refuses to start (valves off) rather than starting empty |
 | Monitoring | `GET /api/health` (no login): 503 when the runner loop stalls, the database doesn't answer or the outputs are in fault; `degraded` for an unsynced clock, a sensor read error or a stale snapshot |
 
@@ -296,6 +296,7 @@ The interface answers three questions at a glance — what is running, what runs
 - Phone-first layout, works from 320 px wide; installable as a PWA; light and dark themes.
 - Live state over server-sent events; every action confirms with its result, never optimistic.
 - Login with password (argon2id) and a long-lived session cookie; optional LAN-only access without login.
+- HTTP always; HTTPS only with a certificate of your own (`[tls] listen`, `cert`, `key`). No built-in certificate authority: the one shipped at first was removed on 2026-11-10, since its key on the Pi could sign certificates for any site that trusting phones would accept.
 - English and Bulgarian text from day one.
 - Page weight under 150 KB gzipped so it loads quickly from the Pi 1.
 
@@ -320,7 +321,7 @@ Cutover happened outside the watering season (2026-11-08, all programs disabled)
 - [x] Master valve or pump: none.
 - [x] Sensors: one rain sensor on GPIO 14 (header pin 8), normally open. In 2.1.8, GPIO 23 (pin 16) is a button, not sensor 2. No flow meter.
 - [x] Stay on the Pi 1 after cutover, or move to a Pi Zero 2 W on a current OS? Decided 2026-11-09: stay on the Pi 1 with Raspbian 10 for now, knowing the OS is out of support.
-- [ ] Access from outside the house: LAN only, or through a VPN such as Tailscale / WireGuard?
+- [ ] Access from outside the house: the user forwards a port on the home router to the Pi under a public DNS name (2026-11-10), over plain HTTP for now. Open: HTTPS for it (likely Let's Encrypt for that name, with a router DNS entry so the same name works at home), and checking the router keeps the client address so "LAN without login" can't be reached from outside.
 - [ ] Which adjustment method should be the default once weather lands: OpenSprinkler service (Zimmerman) or ET-based from Open-Meteo?
 - [x] Per-zone hard cap default: 60 min (decided 2026-11-09); still editable per zone.
 - [ ] OpenSprinkler's clock: did it stay at a fixed UTC+2 through the summer? This decides how the imported June–October run times convert, (Shadow was skipped, so only the history is affected). Check one summer day against a memory of real watering times, or watch for the change at the next DST switch.

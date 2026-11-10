@@ -202,14 +202,6 @@ const en = {
   installed: 'Installed — open it from your home screen.',
   ios_steps: 'In Safari, tap Share (□↑), then “Add to Home Screen”.',
   android_steps: 'In Chrome, open the ⋮ menu, then “Add to Home screen” or “Install app”.',
-  https_hint:
-    'For the full app on Android (and no “Not secure” warning), use the HTTPS address after installing the certificate below once.',
-  open_https: 'Open over HTTPS',
-  download_ca: 'Download certificate',
-  ca_steps_android:
-    'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate, pick the downloaded file.',
-  ca_steps_ios:
-    'iPhone: open the downloaded profile in Settings → Profile Downloaded → Install, then Settings → General → About → Certificate Trust Settings → turn it on.',
   not_found: 'Not found.',
   main_nav: 'Main',
   drag: 'Drag to reorder',
@@ -473,14 +465,6 @@ const bg: Record<Key, string> = {
   installed: 'Инсталирано — отворете го от началния екран.',
   ios_steps: 'В Safari натиснете „Споделяне“ (□↑), после „Добавяне към началния екран“.',
   android_steps: 'В Chrome отворете менюто ⋮, после „Добавяне към началния екран“ или „Инсталиране на приложението“.',
-  https_hint:
-    'За пълноценно приложение на Android (и без предупреждението „Не е защитено“) използвайте HTTPS адреса, след като веднъж инсталирате сертификата по-долу.',
-  open_https: 'Отвори през HTTPS',
-  download_ca: 'Изтегли сертификата',
-  ca_steps_android:
-    'Android: Настройки → Сигурност → Шифроване и идентификационни данни → Инсталиране на сертификат → CA сертификат, изберете изтегления файл.',
-  ca_steps_ios:
-    'iPhone: отворете изтегления профил от Настройки → Профилът е изтеглен → Инсталиране, после Настройки → Общи → Информация → Настройки за доверие на сертификати и го включете.',
   not_found: 'Няма такава страница.',
   main_nav: 'Основно меню',
   drag: 'Плъзнете за пренареждане',
